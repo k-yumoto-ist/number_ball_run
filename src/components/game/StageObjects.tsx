@@ -1,4 +1,5 @@
 import { Billboard, Text } from '@react-three/drei'
+import { GAME_CONFIG } from '../../config/gameConfig'
 import { NUMBER_STYLES } from '../../config/numberConfig'
 import type { StageBall, StageGap, StageObstacle } from '../../types/game'
 
@@ -12,14 +13,17 @@ export function NumberBall({ ball, hidden }: NumberBallProps) {
     return null
   }
   const style = NUMBER_STYLES[ball.value]
+  const labelY = GAME_CONFIG.courseSurfaceY + style.radius * 1.08
+  const labelZ = -style.radius * 0.9
+  const outlineColor = style.textColor === '#ffffff' ? '#172033' : '#ffffff'
 
   return (
     <group position={[ball.x, 0, ball.z]}>
-      <mesh position={[0, style.radius, 0]}>
+      <mesh position={[0, GAME_CONFIG.courseSurfaceY + style.radius, 0]}>
         <sphereGeometry args={[style.radius, 24, 18]} />
         <meshStandardMaterial color={style.color} emissive={style.emissive} emissiveIntensity={style.glow} />
       </mesh>
-      <Billboard position={[0, style.radius * 1.12, -style.radius * 0.82]}>
+      <Billboard follow position={[0, labelY, labelZ]}>
         <Text
           color={style.textColor}
           fontSize={style.radius * (ball.value >= 1024 ? 0.44 : 0.54)}
@@ -27,7 +31,7 @@ export function NumberBall({ ball, hidden }: NumberBallProps) {
           anchorX="center"
           anchorY="middle"
           outlineWidth={0.03}
-          outlineColor="#ffffff"
+          outlineColor={outlineColor}
         >
           {ball.value}
         </Text>

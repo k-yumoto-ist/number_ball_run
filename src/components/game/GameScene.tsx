@@ -1,6 +1,6 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useMemo, useRef, useState } from 'react'
-import type { Group } from 'three'
+import type { Group, Mesh } from 'three'
 import { GAME_CONFIG } from '../../config/gameConfig'
 import { NUMBER_STYLES, nextNumber } from '../../config/numberConfig'
 import { STAGE_ONE } from '../../data/stageOne'
@@ -80,7 +80,8 @@ function GameLoop({
     mergePulse: 0,
     shake: 0,
   })
-  const playerMeshRef = useRef<Group>(null)
+  const playerRootRef = useRef<Group>(null)
+  const playerSphereRef = useRef<Mesh>(null)
   const cameraPlayerRef = useRef<{ x: number; z: number }>({ x: GAME_CONFIG.playerStartX, z: STAGE_ONE.startZ })
   const shakeRef = useRef(0)
   const [collectedIds, setCollectedIds] = useState<Set<string>>(() => new Set())
@@ -171,10 +172,15 @@ function GameLoop({
     player.mergePulse = Math.max(0, player.mergePulse - delta * 2.8)
     player.shake = Math.max(0, player.shake - delta * 3.5)
     shakeRef.current = player.shake
+    const visualScale = 1 + player.mergePulse * 0.16
+    if (playerSphereRef.current) {
+      playerSphereRef.current.position.y = GAME_CONFIG.courseSurfaceY + player.radius * visualScale
+      playerSphereRef.current.scale.setScalar(visualScale)
+    }
 
     if (phase !== 'playing') {
-      if (playerMeshRef.current) {
-        playerMeshRef.current.position.set(player.x, 0, player.z)
+      if (playerRootRef.current) {
+        playerRootRef.current.position.set(player.x, 0, player.z)
       }
       return
     }
@@ -221,9 +227,12 @@ function GameLoop({
     cameraPlayerRef.current.x = player.x
     cameraPlayerRef.current.z = player.z
 
-    if (playerMeshRef.current) {
-      playerMeshRef.current.position.set(player.x, 0, player.z)
-      playerMeshRef.current.rotation.x -= delta * (player.slowTimer > 0 ? 3 : 6)
+    if (playerRootRef.current) {
+      playerRootRef.current.position.set(player.x, 0, player.z)
+    }
+
+    if (playerSphereRef.current) {
+      playerSphereRef.current.rotation.x -= delta * (player.slowTimer > 0 ? 3 : 6)
     }
 
     lastHudRef.current += delta
@@ -241,7 +250,11 @@ function GameLoop({
       <directionalLight position={[-4, 8, -3]} intensity={1.8} />
       <Course stage={stage} collectedIds={collectedIds} />
       <GoalGate z={stage.goalZ} />
-      <PlayerBall ref={playerMeshRef} value={playerRef.current.value} pulse={playerRef.current.mergePulse} />
+      <PlayerBall
+        ref={playerRootRef}
+        sphereRef={playerSphereRef}
+        value={playerRef.current.value}
+      />
       {bursts.map((burst) => (
         <MergeBurst key={burst.id} burst={burst} />
       ))}

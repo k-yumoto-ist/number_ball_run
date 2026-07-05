@@ -67,7 +67,7 @@ button {
   left: 0;
   right: 0;
   display: grid;
-  grid-template-columns: auto auto minmax(72px, 1fr) auto;
+  grid-template-columns: auto auto minmax(60px, 1fr) auto;
   gap: 8px;
   align-items: center;
   padding: calc(env(safe-area-inset-top) + 10px) calc(env(safe-area-inset-right) + 12px) 10px
@@ -89,11 +89,15 @@ button {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  padding: 0 10px;
+  padding: 0 12px;
   font-size: 12px;
   font-weight: 900;
   color: #21304c;
   white-space: nowrap;
+}
+
+.stage-pill {
+  min-width: 82px;
 }
 
 .number-pill {
@@ -179,11 +183,11 @@ button {
 }
 
 .tap-start span {
-  padding: 11px 16px;
+  padding: 11px 18px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.76);
   border: 2px solid rgba(255, 255, 255, 0.9);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
   letter-spacing: 0;
   color: #21304c;
@@ -234,7 +238,7 @@ button {
 .primary-button,
 .secondary-button {
   min-height: 48px;
-  min-width: 168px;
+  min-width: 184px;
   border-radius: 8px;
   padding: 0 18px;
   font-weight: 900;

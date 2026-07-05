@@ -1,5 +1,6 @@
 export const GAME_CONFIG = {
   playerStartX: 0,
+  courseSurfaceY: 0.1,
   baseForwardSpeed: 8.2,
   slowForwardSpeed: 5.1,
   slowDuration: 0.55,

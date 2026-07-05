@@ -16,10 +16,10 @@ export const NUMBER_STYLES: Record<BallNumber, NumberStyle> = {
   8: { color: '#ffe45d', emissive: '#856b00', textColor: '#352600', radius: 0.84, glow: 0.08 },
   16: { color: '#ffac4d', emissive: '#8a3d00', textColor: '#3a1700', radius: 0.91, glow: 0.1 },
   32: { color: '#ff6b7f', emissive: '#7d1427', textColor: '#3b0710', radius: 0.98, glow: 0.12 },
-  64: { color: '#d577ff', emissive: '#5d1681', textColor: '#250832', radius: 1.05, glow: 0.14 },
-  128: { color: '#7b8cff', emissive: '#1d2b8c', textColor: '#090f38', radius: 1.12, glow: 0.16 },
+  64: { color: '#d577ff', emissive: '#5d1681', textColor: '#ffffff', radius: 1.05, glow: 0.14 },
+  128: { color: '#7b8cff', emissive: '#1d2b8c', textColor: '#ffffff', radius: 1.12, glow: 0.16 },
   256: { color: '#42d7cb', emissive: '#006b63', textColor: '#032d2a', radius: 1.18, glow: 0.18 },
-  512: { color: '#f26dcb', emissive: '#7a0d57', textColor: '#300522', radius: 1.24, glow: 0.2 },
+  512: { color: '#f26dcb', emissive: '#7a0d57', textColor: '#ffffff', radius: 1.24, glow: 0.2 },
   1024: { color: '#f7f0a1', emissive: '#9b8700', textColor: '#3f3200', radius: 1.31, glow: 0.24 },
   2048: { color: '#ffffff', emissive: '#ffcf33', textColor: '#111827', radius: 1.38, glow: 0.42 },
 }
