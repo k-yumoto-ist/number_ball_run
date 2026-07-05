@@ -4,12 +4,15 @@ import type { BallNumber, GamePhase, PlayerSnapshot, StoredSettings } from '../.
 
 type GameHudProps = {
   phase: GamePhase
+  stageId: number
+  hasNextStage: boolean
   snapshot: PlayerSnapshot
   settings: StoredSettings
   soundEnabled: boolean
   onPause: () => void
   onResume: () => void
   onRetry: () => void
+  onNextStage: () => void
   onToggleSound: () => void
 }
 
@@ -21,12 +24,16 @@ function ResultOverlay({
   title,
   value,
   time,
+  hasNextStage,
   onRetry,
+  onNextStage,
 }: {
   title: string
   value: BallNumber
   time?: number
+  hasNextStage?: boolean
   onRetry: () => void
+  onNextStage?: () => void
 }) {
   return (
     <div className="overlay panel">
@@ -43,18 +50,27 @@ function ResultOverlay({
         <RotateCcw size={22} aria-hidden="true" />
         {UI_TEXT.retry}
       </button>
+      {hasNextStage && onNextStage ? (
+        <button className="secondary-button" type="button" onClick={onNextStage}>
+          <Play size={20} aria-hidden="true" />
+          {UI_TEXT.nextStage}
+        </button>
+      ) : null}
     </div>
   )
 }
 
 export function GameHud({
   phase,
+  stageId,
+  hasNextStage,
   snapshot,
   settings,
   soundEnabled,
   onPause,
   onResume,
   onRetry,
+  onNextStage,
   onToggleSound,
 }: GameHudProps) {
   const showHelp = phase === 'ready' && !settings.hasSeenHelp
@@ -64,7 +80,7 @@ export function GameHud({
     <div className="ui-layer">
       <header className="hud">
         <div className="hud-pill stage-pill">
-          {UI_TEXT.stage} 1
+          {UI_TEXT.stage} {stageId}
         </div>
         <div className="hud-pill number-pill">{snapshot.value}</div>
         <div className="progress-shell" aria-label="goal progress">
@@ -114,7 +130,14 @@ export function GameHud({
 
       {phase === 'gameOver' ? <ResultOverlay title={UI_TEXT.gameOver} value={snapshot.value} onRetry={onRetry} /> : null}
       {phase === 'cleared' ? (
-        <ResultOverlay title={UI_TEXT.stageClear} value={snapshot.value} time={snapshot.elapsedTime} onRetry={onRetry} />
+        <ResultOverlay
+          title={hasNextStage ? UI_TEXT.stageClear : UI_TEXT.finalStageClear}
+          value={snapshot.value}
+          time={snapshot.elapsedTime}
+          hasNextStage={hasNextStage}
+          onRetry={onRetry}
+          onNextStage={onNextStage}
+        />
       ) : null}
     </div>
   )

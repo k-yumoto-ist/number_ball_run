@@ -3,9 +3,8 @@ import { useMemo, useRef, useState } from 'react'
 import type { Group } from 'three'
 import { GAME_CONFIG } from '../../config/gameConfig'
 import { NUMBER_STYLES, nextNumber } from '../../config/numberConfig'
-import { STAGE_ONE } from '../../data/stageOne'
 import type { InputControls } from '../../hooks/useInputControls'
-import type { BallNumber, GamePhase, PlayerSnapshot, StageBall, StageGap } from '../../types/game'
+import type { BallNumber, GamePhase, PlayerSnapshot, StageBall, StageData, StageGap } from '../../types/game'
 import { playTone, vibrate } from '../../utils/feedback'
 import { clampToTrack, getTrackInfoAtZ } from '../../utils/track'
 import { Course } from './Course'
@@ -15,6 +14,7 @@ import { type Burst, MergeBurst } from './MergeBurst'
 import { PlayerBall } from './PlayerBall'
 
 type GameSceneProps = {
+  stage: StageData
   phase: GamePhase
   controlsRef: React.RefObject<InputControls>
   soundEnabled: boolean
@@ -54,15 +54,16 @@ function ballDistance(player: PlayerRuntime, ball: StageBall) {
   return Math.sqrt(dx * dx + dz * dz) - player.radius - radius
 }
 
-function getSnapshot(player: PlayerRuntime): PlayerSnapshot {
+function getSnapshot(player: PlayerRuntime, stage: StageData): PlayerSnapshot {
   return {
     value: player.value,
-    progress: Math.min(Math.max(player.z / STAGE_ONE.goalZ, 0), 1),
+    progress: Math.min(Math.max((player.z - stage.startZ) / (stage.goalZ - stage.startZ), 0), 1),
     elapsedTime: player.elapsedTime,
   }
 }
 
 function GameLoop({
+  stage,
   phase,
   controlsRef,
   soundEnabled,
@@ -72,7 +73,7 @@ function GameLoop({
 }: GameSceneProps) {
   const playerRef = useRef<PlayerRuntime>({
     x: GAME_CONFIG.playerStartX,
-    z: STAGE_ONE.startZ,
+    z: stage.startZ,
     value: 2,
     radius: NUMBER_STYLES[2].radius,
     elapsedTime: 0,
@@ -82,7 +83,7 @@ function GameLoop({
   })
   const playerRootRef = useRef<Group>(null)
   const playerSphereRef = useRef<Group>(null)
-  const cameraPlayerRef = useRef<{ x: number; z: number }>({ x: GAME_CONFIG.playerStartX, z: STAGE_ONE.startZ })
+  const cameraPlayerRef = useRef<{ x: number; z: number }>({ x: GAME_CONFIG.playerStartX, z: stage.startZ })
   const shakeRef = useRef(0)
   const [collectedIds, setCollectedIds] = useState<Set<string>>(() => new Set())
   const collectedRef = useRef<Set<string>>(new Set())
@@ -91,8 +92,9 @@ function GameLoop({
   const [bursts, setBursts] = useState<Burst[]>([])
   const lastHudRef = useRef(0)
   const finishedRef = useRef(false)
+  const previousXRef = useRef<number>(GAME_CONFIG.playerStartX)
 
-  const stage = useMemo(() => STAGE_ONE, [])
+  const activeStage = useMemo(() => stage, [stage])
 
   const applyHit = (sourceX: number, force: number) => {
     const player = playerRef.current
@@ -123,7 +125,7 @@ function GameLoop({
 
   const checkBalls = () => {
     const player = playerRef.current
-    for (const ball of stage.balls) {
+    for (const ball of activeStage.balls) {
       if (collectedRef.current.has(ball.id)) {
         continue
       }
@@ -144,7 +146,7 @@ function GameLoop({
 
   const checkObstacles = () => {
     const player = playerRef.current
-    for (const obstacle of stage.obstacles) {
+    for (const obstacle of activeStage.obstacles) {
       if (bumpedObstaclesRef.current.has(obstacle.id)) {
         continue
       }
@@ -182,6 +184,7 @@ function GameLoop({
       if (playerRootRef.current) {
         playerRootRef.current.position.set(player.x, 0, player.z)
       }
+      previousXRef.current = player.x
       return
     }
 
@@ -190,38 +193,38 @@ function GameLoop({
 
     const controls = controlsRef.current
     controls.targetX += controls.keyboardAxis * GAME_CONFIG.keyboardSpeed * delta
-    controls.targetX = clampToTrack(stage.track, player.z, controls.targetX, player.radius + GAME_CONFIG.trackEdgePadding)
+    controls.targetX = clampToTrack(activeStage.track, player.z, controls.targetX, player.radius + GAME_CONFIG.trackEdgePadding)
 
     const lateralT = Math.min(delta * GAME_CONFIG.lateralFollow, 1)
     player.x += (controls.targetX - player.x) * lateralT
     player.z += (player.slowTimer > 0 ? GAME_CONFIG.slowForwardSpeed : GAME_CONFIG.baseForwardSpeed) * delta
 
-    const trackInfo = getTrackInfoAtZ(stage.track, player.z)
+    const trackInfo = getTrackInfoAtZ(activeStage.track, player.z)
     const edgeAllowance = player.radius * 0.35
     if (!trackInfo || player.x < trackInfo.left + edgeAllowance || player.x > trackInfo.right - edgeAllowance) {
       finishedRef.current = true
       playTone('gameOver', soundEnabled)
       vibrate(60)
-      onGameOver(getSnapshot(player))
+      onGameOver(getSnapshot(player, activeStage))
       return
     }
 
-    if (stage.gaps.some(isInGap)) {
+    if (activeStage.gaps.some(isInGap)) {
       finishedRef.current = true
       playTone('gameOver', soundEnabled)
       vibrate(60)
-      onGameOver(getSnapshot(player))
+      onGameOver(getSnapshot(player, activeStage))
       return
     }
 
     checkBalls()
     checkObstacles()
 
-    if (player.z >= stage.goalZ) {
+    if (player.z >= activeStage.goalZ) {
       finishedRef.current = true
       playTone('clear', soundEnabled)
       vibrate([20, 35, 20])
-      onClear(getSnapshot(player))
+      onClear(getSnapshot(player, activeStage))
       return
     }
 
@@ -234,14 +237,17 @@ function GameLoop({
 
     if (playerSphereRef.current) {
       const rollDistance = (player.slowTimer > 0 ? GAME_CONFIG.slowForwardSpeed : GAME_CONFIG.baseForwardSpeed) * delta
+      const lateralDistance = player.x - previousXRef.current
       playerSphereRef.current.rotation.x -= rollDistance / Math.max(player.radius, 0.1)
-      playerSphereRef.current.rotation.z -= (controls.keyboardAxis * GAME_CONFIG.keyboardSpeed * delta) / Math.max(player.radius, 0.1)
+      playerSphereRef.current.rotation.y += rollDistance / Math.max(player.radius * 1.8, 0.1)
+      playerSphereRef.current.rotation.z -= lateralDistance / Math.max(player.radius, 0.1)
     }
+    previousXRef.current = player.x
 
     lastHudRef.current += delta
     if (lastHudRef.current > 0.08) {
       lastHudRef.current = 0
-      onSnapshot(getSnapshot(player))
+      onSnapshot(getSnapshot(player, activeStage))
     }
   })
 
@@ -251,8 +257,8 @@ function GameLoop({
       <hemisphereLight args={['#ffffff', '#9ad8b5', 1.1]} />
       <ambientLight intensity={0.85} />
       <directionalLight position={[-4, 8, -3]} intensity={1.8} />
-      <Course stage={stage} collectedIds={collectedIds} />
-      <GoalGate z={stage.goalZ} />
+      <Course stage={activeStage} collectedIds={collectedIds} />
+      <GoalGate z={activeStage.goalZ} />
       <PlayerBall
         ref={playerRootRef}
         sphereRef={playerSphereRef}

@@ -17,4 +17,6 @@ export const UI_TEXT = {
   soundOn: 'オン',
   soundOff: 'オフ',
   pause: '一時停止',
+  nextStage: '次のステージ',
+  finalStageClear: '全ステージクリア',
 } as const
