@@ -13,8 +13,8 @@ type PlayerBallProps = {
 export const PlayerBall = forwardRef<Group, PlayerBallProps>(({ value, sphereRef }, ref) => {
   const style = NUMBER_STYLES[value]
   const isSpecial = value === 2048
-  const labelY = GAME_CONFIG.courseSurfaceY + style.radius * 1.08
-  const labelZ = -style.radius * 0.9
+  const labelY = GAME_CONFIG.courseSurfaceY + style.radius
+  const labelZ = -(isSpecial ? style.radius * 1.2 : style.radius + 0.06)
   const outlineColor = style.textColor === '#ffffff' ? '#172033' : '#ffffff'
 
   return (
@@ -29,7 +29,7 @@ export const PlayerBall = forwardRef<Group, PlayerBallProps>(({ value, sphereRef
           metalness={isSpecial ? 0.18 : 0.04}
         />
       </mesh>
-      <Billboard follow position={[0, labelY, labelZ]}>
+      <Billboard follow position={[0, labelY, labelZ]} renderOrder={20}>
         <Text
           color={style.textColor}
           fontSize={style.radius * (value >= 1024 ? 0.48 : 0.56)}
@@ -38,6 +38,8 @@ export const PlayerBall = forwardRef<Group, PlayerBallProps>(({ value, sphereRef
           anchorY="middle"
           outlineWidth={0.035}
           outlineColor={outlineColor}
+          depthOffset={-10}
+          material-depthTest={false}
         >
           {value}
         </Text>

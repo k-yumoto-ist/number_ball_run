@@ -13,8 +13,8 @@ export function NumberBall({ ball, hidden }: NumberBallProps) {
     return null
   }
   const style = NUMBER_STYLES[ball.value]
-  const labelY = GAME_CONFIG.courseSurfaceY + style.radius * 1.08
-  const labelZ = -style.radius * 0.9
+  const labelY = GAME_CONFIG.courseSurfaceY + style.radius
+  const labelZ = -(style.radius + 0.06)
   const outlineColor = style.textColor === '#ffffff' ? '#172033' : '#ffffff'
 
   return (
@@ -23,7 +23,7 @@ export function NumberBall({ ball, hidden }: NumberBallProps) {
         <sphereGeometry args={[style.radius, 24, 18]} />
         <meshStandardMaterial color={style.color} emissive={style.emissive} emissiveIntensity={style.glow} />
       </mesh>
-      <Billboard follow position={[0, labelY, labelZ]}>
+      <Billboard follow position={[0, labelY, labelZ]} renderOrder={20}>
         <Text
           color={style.textColor}
           fontSize={style.radius * (ball.value >= 1024 ? 0.44 : 0.54)}
@@ -32,6 +32,8 @@ export function NumberBall({ ball, hidden }: NumberBallProps) {
           anchorY="middle"
           outlineWidth={0.03}
           outlineColor={outlineColor}
+          depthOffset={-10}
+          material-depthTest={false}
         >
           {ball.value}
         </Text>
