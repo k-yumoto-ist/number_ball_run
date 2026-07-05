@@ -1,13 +1,13 @@
 import { Billboard, Text } from '@react-three/drei'
 import { forwardRef, type RefObject } from 'react'
-import type { Group, Mesh } from 'three'
+import type { Group } from 'three'
 import { GAME_CONFIG } from '../../config/gameConfig'
 import { NUMBER_STYLES } from '../../config/numberConfig'
 import type { BallNumber } from '../../types/game'
 
 type PlayerBallProps = {
   value: BallNumber
-  sphereRef: RefObject<Mesh | null>
+  sphereRef: RefObject<Group | null>
 }
 
 export const PlayerBall = forwardRef<Group, PlayerBallProps>(({ value, sphereRef }, ref) => {
@@ -19,16 +19,30 @@ export const PlayerBall = forwardRef<Group, PlayerBallProps>(({ value, sphereRef
 
   return (
     <group ref={ref}>
-      <mesh ref={sphereRef} position={[0, GAME_CONFIG.courseSurfaceY + style.radius, 0]}>
-        <sphereGeometry args={[style.radius, 32, 24]} />
-        <meshStandardMaterial
-          color={style.color}
-          emissive={style.emissive}
-          emissiveIntensity={style.glow + (isSpecial ? 0.28 : 0)}
-          roughness={0.42}
-          metalness={isSpecial ? 0.18 : 0.04}
-        />
-      </mesh>
+      <group ref={sphereRef} position={[0, GAME_CONFIG.courseSurfaceY + style.radius, 0]}>
+        <mesh>
+          <sphereGeometry args={[style.radius, 32, 24]} />
+          <meshStandardMaterial
+            color={style.color}
+            emissive={style.emissive}
+            emissiveIntensity={style.glow + (isSpecial ? 0.28 : 0)}
+            roughness={0.42}
+            metalness={isSpecial ? 0.18 : 0.04}
+          />
+        </mesh>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[style.radius * 0.72, style.radius * 0.025, 8, 48]} />
+          <meshBasicMaterial color={outlineColor} transparent opacity={0.55} />
+        </mesh>
+        <mesh rotation={[0, Math.PI / 2, Math.PI / 5]}>
+          <torusGeometry args={[style.radius * 0.58, style.radius * 0.022, 8, 42]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.42} />
+        </mesh>
+        <mesh position={[style.radius * 0.36, style.radius * 0.45, -style.radius * 0.72]}>
+          <sphereGeometry args={[style.radius * 0.075, 10, 8]} />
+          <meshBasicMaterial color={outlineColor} />
+        </mesh>
+      </group>
       <Billboard follow position={[0, labelY, labelZ]} renderOrder={20}>
         <Text
           color={style.textColor}

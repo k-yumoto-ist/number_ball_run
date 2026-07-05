@@ -1,6 +1,6 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useMemo, useRef, useState } from 'react'
-import type { Group, Mesh } from 'three'
+import type { Group } from 'three'
 import { GAME_CONFIG } from '../../config/gameConfig'
 import { NUMBER_STYLES, nextNumber } from '../../config/numberConfig'
 import { STAGE_ONE } from '../../data/stageOne'
@@ -81,7 +81,7 @@ function GameLoop({
     shake: 0,
   })
   const playerRootRef = useRef<Group>(null)
-  const playerSphereRef = useRef<Mesh>(null)
+  const playerSphereRef = useRef<Group>(null)
   const cameraPlayerRef = useRef<{ x: number; z: number }>({ x: GAME_CONFIG.playerStartX, z: STAGE_ONE.startZ })
   const shakeRef = useRef(0)
   const [collectedIds, setCollectedIds] = useState<Set<string>>(() => new Set())
@@ -197,7 +197,8 @@ function GameLoop({
     player.z += (player.slowTimer > 0 ? GAME_CONFIG.slowForwardSpeed : GAME_CONFIG.baseForwardSpeed) * delta
 
     const trackInfo = getTrackInfoAtZ(stage.track, player.z)
-    if (!trackInfo || player.x < trackInfo.left + player.radius * 0.48 || player.x > trackInfo.right - player.radius * 0.48) {
+    const edgeAllowance = player.radius * 0.35
+    if (!trackInfo || player.x < trackInfo.left + edgeAllowance || player.x > trackInfo.right - edgeAllowance) {
       finishedRef.current = true
       playTone('gameOver', soundEnabled)
       vibrate(60)
@@ -232,7 +233,9 @@ function GameLoop({
     }
 
     if (playerSphereRef.current) {
-      playerSphereRef.current.rotation.x -= delta * (player.slowTimer > 0 ? 3 : 6)
+      const rollDistance = (player.slowTimer > 0 ? GAME_CONFIG.slowForwardSpeed : GAME_CONFIG.baseForwardSpeed) * delta
+      playerSphereRef.current.rotation.x -= rollDistance / Math.max(player.radius, 0.1)
+      playerSphereRef.current.rotation.z -= (controls.keyboardAxis * GAME_CONFIG.keyboardSpeed * delta) / Math.max(player.radius, 0.1)
     }
 
     lastHudRef.current += delta
