@@ -1,10 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { EndlessGame } from './components/game/EndlessGame'
 import { GameScene } from './components/game/GameScene'
 import { GameHud } from './components/ui/GameHud'
+import { HomeScreen } from './components/ui/HomeScreen'
 import { STAGES } from './data/stageOne'
 import { useInputControls } from './hooks/useInputControls'
-import type { GamePhase, PlayerSnapshot, StoredSettings } from './types/game'
+import type { AppMode, GamePhase, PlayerSnapshot, StoredSettings } from './types/game'
 import {
+  incrementEndlessPlayCount,
+  loadEndlessRecords,
   loadSettings,
   saveBestClearTime,
   saveBestNumber,
@@ -26,11 +30,13 @@ const INITIAL_SNAPSHOT: PlayerSnapshot = {
 
 function App() {
   const hostRef = useRef<HTMLDivElement>(null)
+  const [mode, setMode] = useState<AppMode>('home')
   const [phase, setPhase] = useState<GamePhase>('ready')
   const [runId, setRunId] = useState(0)
   const [stageIndex, setStageIndex] = useState(0)
   const [snapshot, setSnapshot] = useState<PlayerSnapshot>(INITIAL_SNAPSHOT)
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings())
+  const [endlessRecords, setEndlessRecords] = useState(() => loadEndlessRecords())
   const stage = STAGES[stageIndex]
 
   const transitionTo = useCallback((nextPhase: GamePhase) => {
@@ -53,6 +59,33 @@ function App() {
   }, [markHelpSeen])
 
   const controlsRef = useInputControls(hostRef, phase, handleFirstInput)
+
+  const startEndless = useCallback(() => {
+    controlsRef.current.targetX = 0
+    controlsRef.current.keyboardAxis = 0
+    controlsRef.current.hasInteracted = false
+    setEndlessRecords(incrementEndlessPlayCount())
+    setMode('endless')
+  }, [controlsRef])
+
+  const startTutorial = useCallback(() => {
+    controlsRef.current.targetX = 0
+    controlsRef.current.keyboardAxis = 0
+    controlsRef.current.hasInteracted = false
+    setSnapshot(INITIAL_SNAPSHOT)
+    setStageIndex(0)
+    setRunId((current) => current + 1)
+    setPhase('ready')
+    setMode('tutorial')
+  }, [controlsRef])
+
+  const backHome = useCallback(() => {
+    controlsRef.current.targetX = 0
+    controlsRef.current.keyboardAxis = 0
+    controlsRef.current.hasInteracted = false
+    setPhase('ready')
+    setMode('home')
+  }, [controlsRef])
 
   const handleGameOver = useCallback(
     (nextSnapshot: PlayerSnapshot) => {
@@ -118,6 +151,27 @@ function App() {
     [controlsRef, handleClear, handleGameOver, phase, runId, settings.soundEnabled, stage],
   )
 
+  if (mode === 'home') {
+    return (
+      <main ref={hostRef} className="game-root" aria-label="Number Ball Run">
+        <HomeScreen records={endlessRecords} onStartEndless={startEndless} onStartTutorial={startTutorial} />
+      </main>
+    )
+  }
+
+  if (mode === 'endless') {
+    return (
+      <main className="game-root" aria-label="エンドレスモード">
+        <EndlessGame
+          records={endlessRecords}
+          soundEnabled={settings.soundEnabled}
+          onRecordsChange={setEndlessRecords}
+          onHome={backHome}
+        />
+      </main>
+    )
+  }
+
   return (
     <main ref={hostRef} className="game-root" aria-label={stage.name}>
       {scene}
@@ -134,6 +188,9 @@ function App() {
         onNextStage={nextStage}
         onToggleSound={toggleSound}
       />
+      <button className="home-return-button" type="button" onClick={backHome}>
+        ホーム
+      </button>
     </main>
   )
 }

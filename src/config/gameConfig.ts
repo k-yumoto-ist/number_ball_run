@@ -33,4 +33,6 @@ export const STORAGE_KEYS = {
   bestClearTime: 'numberBallRun.bestClearTime',
   hasSeenHelp: 'numberBallRun.hasSeenHelp',
   soundEnabled: 'numberBallRun.soundEnabled',
+  endlessRecords: 'numberBallRun.endlessRecords',
+  endlessCheckpoint: 'numberBallRun.endlessCheckpoint',
 } as const

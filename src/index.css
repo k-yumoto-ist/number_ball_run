@@ -54,6 +54,13 @@ button {
   touch-action: none;
 }
 
+.endless-root {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
 .ui-layer {
   position: absolute;
   inset: 0;
@@ -301,6 +308,289 @@ button {
   background: rgba(255, 255, 255, 0.88);
 }
 
+.wide-button {
+  width: min(100%, 280px);
+}
+
+.home-screen {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: calc(env(safe-area-inset-top) + 24px) 20px calc(env(safe-area-inset-bottom) + 24px);
+  background:
+    linear-gradient(180deg, rgba(174, 232, 255, 0.92), rgba(184, 239, 212, 0.96)),
+    radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.8), transparent 34%);
+}
+
+.home-inner {
+  width: min(100%, 520px);
+  display: grid;
+  gap: 14px;
+  text-align: center;
+}
+
+.home-kicker {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  color: #2c3f66;
+}
+
+.home-inner h1,
+.checkpoint-panel h1 {
+  margin: 0;
+  font-size: clamp(34px, 12vw, 60px);
+  line-height: 1;
+  letter-spacing: 0;
+  color: #172033;
+}
+
+.home-copy {
+  margin: 0 auto;
+  max-width: 360px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.55;
+  color: #21304c;
+}
+
+.home-actions {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.home-records,
+.checkpoint-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.home-records div,
+.checkpoint-stats div {
+  min-width: 0;
+  padding: 10px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 2px solid rgba(255, 255, 255, 0.82);
+}
+
+.home-records dt,
+.checkpoint-stats dt {
+  font-size: 11px;
+  font-weight: 900;
+  color: #51607b;
+}
+
+.home-records dd,
+.checkpoint-stats dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 950;
+  color: #172033;
+}
+
+.endless-hud {
+  grid-template-columns: auto auto minmax(96px, 1fr) auto;
+}
+
+.rank-pill {
+  min-width: 72px;
+}
+
+.endless-progress {
+  display: grid;
+  place-items: center;
+}
+
+.endless-progress span {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 950;
+  color: #21304c;
+}
+
+.endless-subhud {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 62px);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.endless-subhud span,
+.endless-subhud strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 950;
+  color: #172033;
+}
+
+.shield-chip {
+  color: #2c3f66;
+}
+
+.checkpoint-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  padding: calc(env(safe-area-inset-top) + 14px) 14px calc(env(safe-area-inset-bottom) + 14px);
+  background: rgba(12, 22, 35, 0.32);
+  pointer-events: auto;
+}
+
+.checkpoint-panel {
+  width: min(100%, 520px);
+  max-height: 100%;
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 8px;
+  background: rgba(248, 252, 255, 0.94);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 42px rgba(20, 34, 55, 0.26);
+  text-align: center;
+}
+
+.checkpoint-panel h1 {
+  font-size: clamp(24px, 7vw, 36px);
+}
+
+.checkpoint-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.upgrade-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.upgrade-card {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 2px solid rgba(33, 48, 76, 0.12);
+  background: #ffffff;
+  color: #172033;
+  box-shadow: 0 10px 22px rgba(22, 36, 58, 0.1);
+  pointer-events: auto;
+}
+
+.upgrade-card strong {
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.upgrade-card span,
+.upgrade-card p,
+.upgrade-card small {
+  margin: 0;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.upgrade-card p {
+  font-size: 13px;
+}
+
+.upgrade-card small,
+.upgrade-card span {
+  font-size: 12px;
+  color: #51607b;
+}
+
+.upgrade-rarity {
+  justify-self: start;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(50, 199, 255, 0.16);
+}
+
+.rarity-rare .upgrade-rarity {
+  background: rgba(213, 119, 255, 0.18);
+}
+
+.rarity-epic .upgrade-rarity {
+  background: rgba(255, 216, 77, 0.28);
+}
+
+.result-panel {
+  overflow: auto;
+}
+
+.result-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  margin-top: 4px;
+}
+
+.new-record {
+  display: inline-flex;
+  justify-self: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #ffd84d;
+  color: #172033;
+}
+
+.seed-label {
+  position: absolute;
+  right: calc(env(safe-area-inset-right) + 8px);
+  bottom: calc(env(safe-area-inset-bottom) + 8px);
+  z-index: 3;
+  font-size: 10px;
+  font-weight: 800;
+  color: rgba(23, 32, 51, 0.46);
+  pointer-events: none;
+}
+
+.home-return-button {
+  position: absolute;
+  left: calc(env(safe-area-inset-left) + 12px);
+  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  z-index: 6;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.84);
+  color: #21304c;
+  font-weight: 900;
+  pointer-events: auto;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
 @media (min-width: 700px) {
   .hud {
     grid-template-columns: auto auto minmax(180px, 420px) auto;
@@ -310,6 +600,14 @@ button {
 
   .hint {
     top: calc(env(safe-area-inset-top) + 92px);
+  }
+
+  .upgrade-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .checkpoint-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -324,5 +622,18 @@ button {
 
   .overlay {
     padding-top: calc(env(safe-area-inset-top) + 58px);
+  }
+
+  .home-inner h1 {
+    font-size: 36px;
+  }
+
+  .checkpoint-panel {
+    grid-template-columns: 1fr 1.25fr;
+    align-items: start;
+  }
+
+  .upgrade-grid {
+    grid-row: span 4;
   }
 }

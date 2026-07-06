@@ -1,5 +1,6 @@
 import { STORAGE_KEYS } from '../config/gameConfig'
-import type { BallNumber, StoredSettings } from '../types/game'
+import { ENDLESS_STORAGE_VERSION } from '../config/endlessConfig'
+import type { BallNumber, EndlessBestRecords, EndlessSnapshot, StoredSettings } from '../types/game'
 
 const DEFAULT_SETTINGS: StoredSettings = {
   bestNumber: 2,
@@ -56,4 +57,71 @@ export function saveHasSeenHelp(): void {
 
 export function saveSoundEnabled(enabled: boolean): void {
   writeString(STORAGE_KEYS.soundEnabled, String(enabled))
+}
+
+const DEFAULT_ENDLESS_RECORDS: EndlessBestRecords = {
+  version: ENDLESS_STORAGE_VERSION,
+  bestScore: 0,
+  longestDistance: 0,
+  highestRank: 1,
+  maxEvolutions: 0,
+  maxCombo: 0,
+  playCount: 0,
+  hasSeenEndlessHelp: false,
+  vibrationEnabled: true,
+}
+
+export function loadEndlessRecords(): EndlessBestRecords {
+  const raw = readString(STORAGE_KEYS.endlessRecords)
+  if (!raw) {
+    return DEFAULT_ENDLESS_RECORDS
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<EndlessBestRecords>
+    if (parsed.version !== ENDLESS_STORAGE_VERSION) {
+      return DEFAULT_ENDLESS_RECORDS
+    }
+    return { ...DEFAULT_ENDLESS_RECORDS, ...parsed }
+  } catch {
+    return DEFAULT_ENDLESS_RECORDS
+  }
+}
+
+export function saveEndlessHelpSeen(): EndlessBestRecords {
+  const next = { ...loadEndlessRecords(), hasSeenEndlessHelp: true }
+  writeString(STORAGE_KEYS.endlessRecords, JSON.stringify(next))
+  return next
+}
+
+export function incrementEndlessPlayCount(): EndlessBestRecords {
+  const next = { ...loadEndlessRecords(), playCount: loadEndlessRecords().playCount + 1 }
+  writeString(STORAGE_KEYS.endlessRecords, JSON.stringify(next))
+  return next
+}
+
+export function saveEndlessResult(snapshot: EndlessSnapshot): { records: EndlessBestRecords; isNewBest: boolean } {
+  const current = loadEndlessRecords()
+  const isNewBest = snapshot.score > current.bestScore
+  const next: EndlessBestRecords = {
+    ...current,
+    bestScore: Math.max(current.bestScore, snapshot.score),
+    longestDistance: Math.max(current.longestDistance, snapshot.distance),
+    highestRank: Math.max(current.highestRank, snapshot.evolutionRank),
+    maxEvolutions: Math.max(current.maxEvolutions, snapshot.evolutionCount),
+    maxCombo: Math.max(current.maxCombo, snapshot.maxCombo),
+  }
+  writeString(STORAGE_KEYS.endlessRecords, JSON.stringify(next))
+  return { records: next, isNewBest }
+}
+
+export function saveEndlessCheckpoint(snapshot: EndlessSnapshot): void {
+  writeString(STORAGE_KEYS.endlessCheckpoint, JSON.stringify({ version: ENDLESS_STORAGE_VERSION, savedAt: Date.now(), snapshot }))
+}
+
+export function clearEndlessCheckpoint(): void {
+  try {
+    window.localStorage.removeItem(STORAGE_KEYS.endlessCheckpoint)
+  } catch {
+    // Ignore storage errors.
+  }
 }

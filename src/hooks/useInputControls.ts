@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { GAME_CONFIG } from '../config/gameConfig'
-import type { GamePhase } from '../types/game'
+import type { EndlessPhase, GamePhase } from '../types/game'
 
 export type InputControls = {
   targetX: number
@@ -10,7 +10,7 @@ export type InputControls = {
 
 export function useInputControls(
   hostRef: React.RefObject<HTMLElement | null>,
-  phase: GamePhase,
+  phase: GamePhase | EndlessPhase | 'home',
   onFirstInput: () => void,
 ) {
   const controlsRef = useRef<InputControls>({ targetX: 0, keyboardAxis: 0, hasInteracted: false })
@@ -39,7 +39,14 @@ export function useInputControls(
     }
 
     const onPointerDown = (event: PointerEvent) => {
-      if (phaseRef.current === 'paused' || phaseRef.current === 'gameOver' || phaseRef.current === 'cleared') {
+      if (
+        phaseRef.current === 'home' ||
+        phaseRef.current === 'paused' ||
+        phaseRef.current === 'gameOver' ||
+        phaseRef.current === 'cleared' ||
+        phaseRef.current === 'checkpoint' ||
+        phaseRef.current === 'evolving'
+      ) {
         return
       }
       pointerRef.current = { active: true, x: event.clientX, id: event.pointerId }

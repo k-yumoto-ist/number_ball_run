@@ -96,3 +96,104 @@ export type StoredSettings = {
   hasSeenHelp: boolean
   soundEnabled: boolean
 }
+
+export type AppMode = 'home' | 'endless' | 'tutorial'
+
+export type EndlessPhase = 'ready' | 'playing' | 'checkpoint' | 'evolving' | 'paused' | 'gameOver'
+
+export type CourseChunkTag =
+  | 'safe'
+  | 'merge'
+  | 'combo'
+  | 'obstacle'
+  | 'narrow'
+  | 'wall'
+  | 'speed'
+  | 'recovery'
+  | 'riskReward'
+  | 'special'
+
+export type CourseChunk = {
+  id: string
+  length: number
+  difficulty: number
+  minimumLevel: number
+  maximumLevel?: number
+  weight: number
+  tags: CourseChunkTag[]
+  track: (Omit<TrackSegment, 'id' | 'zStart' | 'zEnd'> & { zStart: number; zEnd: number; id?: string })[]
+  balls: Omit<StageBall, 'id'>[]
+  obstacles: Omit<StageObstacle, 'id'>[]
+  movingObstacles: Omit<MovingObstacle, 'id'>[]
+  gaps: Omit<StageGap, 'id'>[]
+  walls: Omit<NumberWall, 'id'>[]
+  speedBoosts: Omit<SpeedBoost, 'id'>[]
+  specialEvent?: 'wallRush' | 'comboRush' | 'choiceGate'
+}
+
+export type GeneratedChunk = {
+  instanceId: string
+  chunkId: string
+  zStart: number
+  zEnd: number
+  tags: CourseChunkTag[]
+  difficulty: number
+}
+
+export type UpgradeCategory = 'merge' | 'combo' | 'defense' | 'speed' | 'score'
+export type UpgradeRarity = 'common' | 'rare' | 'epic'
+
+export type UpgradeId =
+  | 'magnetRange'
+  | 'mergeRange'
+  | 'doubleUp'
+  | 'comboExtend'
+  | 'comboAccel'
+  | 'comboShield'
+  | 'shield'
+  | 'numberGuard'
+  | 'courseRecovery'
+  | 'wallBonus'
+  | 'comboBonus'
+  | 'riskReward'
+
+export type UpgradeDefinition = {
+  id: UpgradeId
+  name: string
+  description: string
+  nextDescription: string
+  category: UpgradeCategory
+  rarity: UpgradeRarity
+  maxLevel: number
+}
+
+export type UpgradeLevels = Partial<Record<UpgradeId, number>>
+
+export type EndlessSnapshot = {
+  value: BallNumber
+  distance: number
+  checkpointProgress: number
+  combo: number
+  maxCombo: number
+  score: number
+  wallsDestroyed: number
+  shields: number
+  evolutionRank: number
+  evolutionCount: number
+  difficultyLevel: number
+  seed: number
+  generatedChunks: number
+  upgrades: UpgradeLevels
+}
+
+export type EndlessBestRecords = {
+  version: number
+  bestScore: number
+  longestDistance: number
+  highestRank: number
+  maxEvolutions: number
+  maxCombo: number
+  playCount: number
+  hasSeenEndlessHelp: boolean
+  vibrationEnabled: boolean
+}
