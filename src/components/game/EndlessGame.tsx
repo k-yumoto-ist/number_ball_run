@@ -689,11 +689,11 @@ function KidsLoop({
     const controls = controlsRef.current
     if (switchCooldownRef.current === 0) {
       if (controls.targetX > KIDS_ENDLESS_CONFIG.laneSwitchThreshold || controls.keyboardAxis > 0) {
-        player.lane = Math.min(2, player.lane + 1) as LaneIndex
+        player.lane = Math.max(0, player.lane - 1) as LaneIndex
         controls.targetX = 0
         switchCooldownRef.current = 0.16
       } else if (controls.targetX < -KIDS_ENDLESS_CONFIG.laneSwitchThreshold || controls.keyboardAxis < 0) {
-        player.lane = Math.max(0, player.lane - 1) as LaneIndex
+        player.lane = Math.min(2, player.lane + 1) as LaneIndex
         controls.targetX = 0
         switchCooldownRef.current = 0.16
       }
@@ -714,7 +714,7 @@ function KidsLoop({
     if (nextTheme.id !== currentThemeIdRef.current) {
       currentThemeIdRef.current = nextTheme.id
       setTheme(nextTheme)
-      setThemeMessage('進化！')
+      setThemeMessage(nextTheme.name)
       themeMessageTimerRef.current = 1.2
     }
 
