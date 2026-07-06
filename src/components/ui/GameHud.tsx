@@ -24,12 +24,14 @@ function ResultOverlay({
   title,
   snapshot,
   hasNextStage,
+  isClear,
   onRetry,
   onNextStage,
 }: {
   title: string
   snapshot: PlayerSnapshot
   hasNextStage?: boolean
+  isClear?: boolean
   onRetry: () => void
   onNextStage?: () => void
 }) {
@@ -46,7 +48,7 @@ function ResultOverlay({
         {UI_TEXT.destroyedWalls} {snapshot.wallsDestroyed + snapshot.bonusWallsDestroyed}
       </p>
       <p>
-        {UI_TEXT.clearTime} {formatTime(snapshot.elapsedTime)}
+        {isClear ? UI_TEXT.clearTime : UI_TEXT.time} {formatTime(snapshot.elapsedTime)}
       </p>
       <p>
         {UI_TEXT.score} {Math.round(snapshot.score)}
@@ -150,6 +152,7 @@ export function GameHud({
         <ResultOverlay
           title={hasNextStage ? UI_TEXT.stageClear : UI_TEXT.finalStageClear}
           snapshot={snapshot}
+          isClear
           hasNextStage={hasNextStage}
           onRetry={onRetry}
           onNextStage={onNextStage}

@@ -382,6 +382,16 @@ function GameLoop({
     speedRef.current = player.currentSpeed
     player.z += player.currentSpeed * delta
 
+    if (!player.isBonus && player.z >= activeStage.goalZ) {
+      player.isBonus = true
+      player.x = 0
+      controls.targetX = 0
+      player.score += player.value * 250 + Math.max(0, 90 - player.elapsedTime) * 10
+      player.shake = 0.8
+      playTone('clear', soundEnabled)
+      vibrate([20, 35, 20])
+    }
+
     const trackInfo = getTrackInfoAtZ(activeStage.track, player.z)
     const edgeAllowance = player.radius * 0.35
     if (!player.isBonus && (!trackInfo || player.x < trackInfo.left + edgeAllowance || player.x > trackInfo.right - edgeAllowance)) {
@@ -392,7 +402,7 @@ function GameLoop({
       return
     }
 
-    if (activeStage.gaps.some(isInGap)) {
+    if (!player.isBonus && activeStage.gaps.some(isInGap)) {
       finishedRef.current = true
       playTone('gameOver', soundEnabled)
       vibrate(60)
@@ -407,16 +417,6 @@ function GameLoop({
       return
     }
     checkSpeedBoosts()
-
-    if (!player.isBonus && player.z >= activeStage.goalZ) {
-      player.isBonus = true
-      player.x = 0
-      controls.targetX = 0
-      player.score += player.value * 250 + Math.max(0, 90 - player.elapsedTime) * 10
-      player.shake = 0.8
-      playTone('clear', soundEnabled)
-      vibrate([20, 35, 20])
-    }
 
     if (player.isBonus && activeStage.bonusWalls.every((wall) => hiddenWallRef.current.has(wall.id))) {
       finishedRef.current = true
