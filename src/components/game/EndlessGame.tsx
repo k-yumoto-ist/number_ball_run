@@ -1,4 +1,4 @@
-import { Billboard, Text } from '@react-three/drei'
+﻿import { Billboard, Text } from '@react-three/drei'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Group } from 'three'
@@ -108,7 +108,6 @@ const THEMES: { id: ThemeId; name: string; start: number; sky: string; fog: stri
   { id: 'sea', name: '海の世界', start: 1000, sky: '#8ee7ff', fog: '#8ee7ff', track: '#54d2c7', lane: '#c7fff8', ground: '#9de7ff', obstacle: '#226a8a' },
   { id: 'space', name: '宇宙', start: 1500, sky: '#1b2555', fog: '#1b2555', track: '#5f6cff', lane: '#d7dcff', ground: '#10183d', obstacle: '#ffcf5d' },
 ]
-
 const INITIAL_SNAPSHOT: EndlessSnapshot = {
   value: 2,
   distance: 0,
@@ -271,42 +270,45 @@ function StarObject({ x, z, count, hidden }: { x: number; z: number; count: numb
   return (
     <group>
       {Array.from({ length: count }, (_, index) => (
-        <Billboard key={index} follow position={[x, 1.05, z + (index - (count - 1) / 2) * 0.95]}>
-          <Text color="#ffd84d" fontSize={0.72} outlineWidth={0.035} outlineColor="#7a5600" material-depthTest={false}>
-            ★
-          </Text>
-        </Billboard>
+        <mesh key={index} position={[x, 0.86, z + (index - (count - 1) / 2) * 0.95]} rotation={[0.7, 0.2, 0.4]}>
+          <octahedronGeometry args={[0.34, 0]} />
+          <meshBasicMaterial color="#ffd84d" />
+        </mesh>
       ))}
     </group>
   )
 }
-
 function ItemObject({ type, x, z, hidden }: { type: ItemType | 'heart'; x: number; z: number; hidden: boolean }) {
   if (hidden) return null
-  const icon = type === 'shield' ? '◆' : type === 'magnet' ? 'U' : type === 'slow' ? 'S' : type === 'rainbow' ? '◎' : type === 'giant' ? 'G' : '♥'
   const color = type === 'shield' ? '#65b7ff' : type === 'magnet' ? '#ff5f7a' : type === 'slow' ? '#9c8cff' : type === 'rainbow' ? '#ffe45d' : type === 'giant' ? '#58e38b' : '#ff5f7a'
   return (
     <group position={[x, 0, z]}>
       <mesh position={[0, 0.72, 0]}>
-        <sphereGeometry args={[0.48, 18, 14]} />
+        <icosahedronGeometry args={[0.5, 0]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.22} />
       </mesh>
-      <Billboard follow position={[0, 0.74, -0.5]} renderOrder={20}>
-        <Text color="#172033" fontSize={0.48} fontWeight={900} outlineWidth={0.025} outlineColor="#ffffff" material-depthTest={false}>
-          {icon}
-        </Text>
-      </Billboard>
+      {type === 'heart' && (
+        <mesh position={[0, 0.72, -0.42]} rotation={[0, 0, Math.PI / 4]}>
+          <boxGeometry args={[0.34, 0.34, 0.08]} />
+          <meshBasicMaterial color="#ffffff" />
+        </mesh>
+      )}
+      {type === 'rainbow' && (
+        <mesh position={[0, 0.72, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.5, 0.035, 6, 24]} />
+          <meshBasicMaterial color="#ffffff" />
+        </mesh>
+      )}
     </group>
   )
 }
-
 function NumberObject({ value, x, z, hidden }: { value: BallNumber; x: number; z: number; hidden: boolean }) {
   if (hidden) return null
   const style = NUMBER_STYLES[value]
   return (
     <group position={[x, 0, z]}>
       <mesh position={[0, GAME_CONFIG.courseSurfaceY + style.radius, 0]}>
-        <sphereGeometry args={[style.radius, 24, 18]} />
+        <sphereGeometry args={[style.radius, 18, 14]} />
         <meshStandardMaterial color={style.color} emissive={style.emissive} emissiveIntensity={style.glow} />
       </mesh>
       <Billboard follow position={[0, GAME_CONFIG.courseSurfaceY + style.radius, -(style.radius + 0.08)]} renderOrder={20}>
@@ -641,7 +643,13 @@ function KidsLoop({
     const keepFrom = playerZ - KIDS_ENDLESS_CONFIG.rowsBehind * KIDS_ENDLESS_CONFIG.rowSpacing - KIDS_ENDLESS_CONFIG.pruneBehindDistance
     const before = rowsRef.current.length
     rowsRef.current = rowsRef.current.filter((row) => row.z > keepFrom)
-    if (before !== rowsRef.current.length) changed = true
+    if (before !== rowsRef.current.length) {
+      const activeRowIds = new Set(rowsRef.current.map((row) => row.id))
+      hiddenRef.current = new Set([...hiddenRef.current].filter((id) => activeRowIds.has(id.slice(0, id.lastIndexOf('-')))))
+      hitRef.current = new Set([...hitRef.current].filter((id) => activeRowIds.has(id.slice(0, id.lastIndexOf('-')))))
+      setHiddenIds(new Set(hiddenRef.current))
+      changed = true
+    }
     if (changed) setRows([...rowsRef.current])
   }
 
@@ -662,7 +670,7 @@ function KidsLoop({
     switchCooldownRef.current = Math.max(0, switchCooldownRef.current - delta)
     themeMessageTimerRef.current = Math.max(0, themeMessageTimerRef.current - delta)
     eventMessageTimerRef.current = Math.max(0, eventMessageTimerRef.current - delta)
-    if (themeMessageTimerRef.current === 0 && themeMessage) setThemeMessage('')
+    if (themeMessageTimerRef.current === 0 && themeMessage) setThemeMessage('進化！')
     if (eventMessageTimerRef.current === 0 && eventMessage) setEventMessage('')
     shakeRef.current = player.shake
 
@@ -706,7 +714,7 @@ function KidsLoop({
     if (nextTheme.id !== currentThemeIdRef.current) {
       currentThemeIdRef.current = nextTheme.id
       setTheme(nextTheme)
-      setThemeMessage(nextTheme.name)
+      setThemeMessage('進化！')
       themeMessageTimerRef.current = 1.2
     }
 
@@ -848,8 +856,8 @@ export function EndlessGame({ records, soundEnabled, onRecordsChange, onHome }: 
     <section ref={hostRef} className="endless-root" aria-label="エンドレスモード">
       <Canvas
         key={`${runId}-${seed}`}
-        dpr={[1, 1.5]}
-        gl={{ antialias: true, powerPreference: 'high-performance', alpha: true }}
+        dpr={[1, 1.25]}
+        gl={{ antialias: false, powerPreference: 'high-performance', alpha: true }}
         onCreated={({ gl, camera }) => {
           gl.setClearColor('#aee8ff', 0)
           camera.lookAt(0, 1, 8)
