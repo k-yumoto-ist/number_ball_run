@@ -38,20 +38,29 @@ export function useInputControls(
       }
     }
 
+    const isInputBlocked = () =>
+      phaseRef.current === 'home' ||
+      phaseRef.current === 'paused' ||
+      phaseRef.current === 'gameOver' ||
+      phaseRef.current === 'cleared' ||
+      phaseRef.current === 'checkpoint' ||
+      phaseRef.current === 'evolving'
+
+    const isInteractiveTarget = (target: EventTarget | null) =>
+      target instanceof Element && Boolean(target.closest('button, a, input, select, textarea, [data-ui-control="true"]'))
+
     const onPointerDown = (event: PointerEvent) => {
-      if (
-        phaseRef.current === 'home' ||
-        phaseRef.current === 'paused' ||
-        phaseRef.current === 'gameOver' ||
-        phaseRef.current === 'cleared' ||
-        phaseRef.current === 'checkpoint' ||
-        phaseRef.current === 'evolving'
-      ) {
+      if (isInputBlocked() || isInteractiveTarget(event.target)) {
         return
       }
       pointerRef.current = { active: true, x: event.clientX, id: event.pointerId }
-      host.setPointerCapture(event.pointerId)
       markInput()
+      try {
+        host.setPointerCapture(event.pointerId)
+      } catch {
+        // Some mobile browsers can reject pointer capture when the canvas is the event target.
+        // The window-level move listener below keeps dragging responsive in that case.
+      }
     }
 
     const onPointerMove = (event: PointerEvent) => {
@@ -75,6 +84,9 @@ export function useInputControls(
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (isInputBlocked()) {
+        return
+      }
       if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') {
         controlsRef.current.keyboardAxis = -1
         markInput()
@@ -100,6 +112,9 @@ export function useInputControls(
     host.addEventListener('pointermove', onPointerMove, { passive: false })
     host.addEventListener('pointerup', onPointerUp)
     host.addEventListener('pointercancel', onPointerUp)
+    window.addEventListener('pointermove', onPointerMove, { passive: false })
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
 
@@ -108,6 +123,9 @@ export function useInputControls(
       host.removeEventListener('pointermove', onPointerMove)
       host.removeEventListener('pointerup', onPointerUp)
       host.removeEventListener('pointercancel', onPointerUp)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
