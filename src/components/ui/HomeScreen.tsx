@@ -1,5 +1,7 @@
 import type { EndlessBestRecords } from '../../types/game'
 
+declare const __APP_VERSION__: string
+
 type HomeScreenProps = {
   records: EndlessBestRecords
   onStartEndless: () => void
@@ -11,7 +13,7 @@ export function HomeScreen({ records, onStartEndless, onStartTutorial }: HomeScr
     <section className="home-screen">
       <div className="home-inner">
         <p className="home-kicker">Number Ball Run</p>
-        <h1>ナンバーボールラン</h1>
+        <h1 className="home-title">NUMBER BALL RUN</h1>
         <p className="home-copy">よけて、星を集めて、同じ数字で大きくなろう。</p>
         <div className="home-actions">
           <button className="primary-button wide-button" type="button" onClick={onStartEndless}>
@@ -35,6 +37,7 @@ export function HomeScreen({ records, onStartEndless, onStartTutorial }: HomeScr
             <dd>{records.totalStars.toLocaleString()}</dd>
           </div>
         </dl>
+        <p className="app-version">v{__APP_VERSION__}</p>
       </div>
     </section>
   )
