@@ -1,67 +1,115 @@
+import { Billboard, Text } from '@react-three/drei'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Group } from 'three'
-import { getDifficultyConfig } from '../../config/difficultyConfig'
-import { ENDLESS_CONFIG } from '../../config/endlessConfig'
-import { SCORE_CONFIG } from '../../config/scoreConfig'
 import { GAME_CONFIG } from '../../config/gameConfig'
-import { NUMBER_STYLES, nextNumber, previousNumber } from '../../config/numberConfig'
+import { KIDS_ENDLESS_CONFIG, LANE_X } from '../../config/kidsEndlessConfig'
+import { NUMBER_STYLES, nextNumber, NUMBER_ORDER } from '../../config/numberConfig'
 import type { InputControls } from '../../hooks/useInputControls'
 import { useInputControls } from '../../hooks/useInputControls'
-import type { BallNumber, EndlessBestRecords, EndlessPhase, EndlessSnapshot, StageBall, StageData, StageObstacle, UpgradeDefinition, UpgradeLevels } from '../../types/game'
+import type { BallNumber, EndlessBestRecords, EndlessPhase, EndlessSnapshot } from '../../types/game'
 import { playTone, vibrate } from '../../utils/feedback'
-import { getMovingObstacleX } from '../../utils/movingObstacle'
-import { clampToTrack, getTrackInfoAtZ } from '../../utils/track'
-import { generateAhead, createInitialGeneratorState, pruneBehind, validateGeneratedStage, type DirectorState } from '../../game/ChunkGenerator'
+import { saveEndlessHelpSeen, incrementEndlessPlayCount, saveEndlessResult } from '../../utils/storage'
 import { SeededRandom, createRunSeed } from '../../game/SeededRandom'
-import { applyUpgrade, chooseUpgradeOptions, getUpgradeEffects } from '../../game/UpgradeManager'
-import { clearEndlessCheckpoint, incrementEndlessPlayCount, saveEndlessCheckpoint, saveEndlessHelpSeen, saveEndlessResult } from '../../utils/storage'
-import { Course } from './Course'
 import { FollowCamera } from './FollowCamera'
 import { type Burst, MergeBurst } from './MergeBurst'
 import { PlayerBall } from './PlayerBall'
 import { EndlessHud } from '../ui/EndlessHud'
-import { CheckpointScreen } from '../ui/CheckpointScreen'
 import { EndlessResultScreen } from '../ui/EndlessResultScreen'
 
-type EndlessGameProps = {
-  records: EndlessBestRecords
-  soundEnabled: boolean
-  onRecordsChange: (records: EndlessBestRecords) => void
-  onHome: () => void
+type LaneIndex = 0 | 1 | 2
+type NumberMode = 'same' | 'smaller' | 'larger'
+type ItemType = 'shield' | 'magnet' | 'slow' | 'rainbow' | 'giant'
+type ObstacleType = 'block' | 'movingBlock' | 'gate' | 'rotatingBar'
+type EventType = 'mergeRush' | 'starRush' | 'giantRush' | 'heartChance'
+type ThemeId = 'sky' | 'candy' | 'sea' | 'space'
+
+type LaneContent =
+  | { type: 'empty' }
+  | { type: 'star'; count?: number }
+  | { type: 'numberBall'; valueMode: NumberMode }
+  | { type: 'obstacle'; obstacleType: ObstacleType }
+  | { type: 'item'; itemType: ItemType }
+  | { type: 'heart' }
+
+type RowPattern = {
+  id: string
+  minimumDifficulty: number
+  maximumDifficulty?: number
+  weight: number
+  tags: string[]
+  lanes: [LaneContent, LaneContent, LaneContent]
+}
+
+type GeneratedRow = {
+  id: string
+  patternId: string
+  z: number
+  difficulty: number
+  eventType?: EventType
+  lanes: [LaneContent, LaneContent, LaneContent]
 }
 
 type PlayerRuntime = {
   x: number
   z: number
+  lane: LaneIndex
   value: BallNumber
+  highestNumber: BallNumber
   radius: number
-  elapsedTime: number
-  combo: number
-  comboTimer: number
-  maxCombo: number
+  hearts: number
+  stars: number
   score: number
-  wallsDestroyed: number
-  speedBoostTimer: number
-  speedMultiplier: number
+  merges: number
+  deflects: number
+  obstaclesBroken: number
+  evolutionCount: number
+  elapsedTime: number
   currentSpeed: number
   slowTimer: number
+  invincibleTimer: number
   mergePulse: number
   shake: number
-  invincibleTimer: number
-  shields: number
-  evolutionRank: number
-  evolutionCount: number
-  difficultyLevel: number
-  checkpointIndex: number
-  nextCheckpointChunk: number
-  recoveryCharges: number
-  comboShieldCooldown: number
-  recentDamage: number
-  evolutionJustHappenedTimer: number
+  shield: boolean
+  magnetTimer: number
+  slowItemTimer: number
+  rainbow: boolean
+  giantTimer: number
+  lastMergeZ: number
+  lastDamageZ: number
 }
 
-const INITIAL_ENDLESS_SNAPSHOT: EndlessSnapshot = {
+const LANES = [LANE_X.left, LANE_X.center, LANE_X.right] as const
+const EMPTY: LaneContent = { type: 'empty' }
+
+const ROW_PATTERNS: RowPattern[] = [
+  { id: 'simple-star-left', minimumDifficulty: 1, weight: 8, tags: ['safe', 'star'], lanes: [{ type: 'star', count: 1 }, EMPTY, { type: 'obstacle', obstacleType: 'block' }] },
+  { id: 'simple-star-right', minimumDifficulty: 1, weight: 8, tags: ['safe', 'star'], lanes: [{ type: 'obstacle', obstacleType: 'block' }, EMPTY, { type: 'star', count: 1 }] },
+  { id: 'center-merge-choice', minimumDifficulty: 1, weight: 7, tags: ['merge'], lanes: [{ type: 'star', count: 3 }, { type: 'numberBall', valueMode: 'same' }, EMPTY] },
+  { id: 'side-merge-choice', minimumDifficulty: 1, weight: 7, tags: ['merge'], lanes: [{ type: 'numberBall', valueMode: 'same' }, { type: 'obstacle', obstacleType: 'block' }, { type: 'star', count: 3 }] },
+  { id: 'small-number-free', minimumDifficulty: 1, weight: 7, tags: ['number'], lanes: [{ type: 'numberBall', valueMode: 'smaller' }, EMPTY, { type: 'star', count: 1 }] },
+  { id: 'big-number-warning', minimumDifficulty: 1, weight: 5, tags: ['danger'], lanes: [{ type: 'star', count: 1 }, { type: 'numberBall', valueMode: 'larger' }, EMPTY] },
+  { id: 'two-blocks-safe-left', minimumDifficulty: 2, weight: 6, tags: ['obstacle'], lanes: [EMPTY, { type: 'obstacle', obstacleType: 'block' }, { type: 'obstacle', obstacleType: 'block' }] },
+  { id: 'two-blocks-safe-right', minimumDifficulty: 2, weight: 6, tags: ['obstacle'], lanes: [{ type: 'obstacle', obstacleType: 'block' }, { type: 'obstacle', obstacleType: 'block' }, EMPTY] },
+  { id: 'moving-block-row', minimumDifficulty: 2, weight: 5, tags: ['moving'], lanes: [{ type: 'star', count: 1 }, { type: 'obstacle', obstacleType: 'movingBlock' }, EMPTY] },
+  { id: 'item-safe', minimumDifficulty: 1, weight: 5, tags: ['item'], lanes: [EMPTY, { type: 'item', itemType: 'shield' }, { type: 'star', count: 1 }] },
+  { id: 'magnet-choice', minimumDifficulty: 2, weight: 4, tags: ['item', 'star'], lanes: [{ type: 'item', itemType: 'magnet' }, { type: 'obstacle', obstacleType: 'block' }, { type: 'star', count: 3 }] },
+  { id: 'slow-choice', minimumDifficulty: 2, weight: 4, tags: ['item'], lanes: [{ type: 'star', count: 1 }, { type: 'item', itemType: 'slow' }, EMPTY] },
+  { id: 'rainbow-choice', minimumDifficulty: 2, weight: 3, tags: ['item', 'number'], lanes: [{ type: 'numberBall', valueMode: 'larger' }, EMPTY, { type: 'item', itemType: 'rainbow' }] },
+  { id: 'giant-choice', minimumDifficulty: 3, weight: 3, tags: ['item'], lanes: [{ type: 'item', itemType: 'giant' }, { type: 'obstacle', obstacleType: 'block' }, EMPTY] },
+  { id: 'heart-chance-row', minimumDifficulty: 1, weight: 2, tags: ['heart'], lanes: [{ type: 'heart' }, EMPTY, { type: 'star', count: 1 }] },
+  { id: 'gate-row', minimumDifficulty: 3, weight: 4, tags: ['gate'], lanes: [{ type: 'star', count: 1 }, { type: 'obstacle', obstacleType: 'gate' }, EMPTY] },
+  { id: 'rotating-row', minimumDifficulty: 4, weight: 3, tags: ['rotating'], lanes: [EMPTY, { type: 'obstacle', obstacleType: 'rotatingBar' }, { type: 'star', count: 3 }] },
+]
+
+const THEMES: { id: ThemeId; name: string; start: number; sky: string; fog: string; track: string; lane: string; ground: string; obstacle: string }[] = [
+  { id: 'sky', name: '空の道', start: 0, sky: '#aee8ff', fog: '#aee8ff', track: '#80e0a1', lane: '#e9fff0', ground: '#b8efd4', obstacle: '#30415f' },
+  { id: 'candy', name: 'お菓子の国', start: 500, sky: '#ffd6ec', fog: '#ffd6ec', track: '#ffc766', lane: '#fff1b5', ground: '#ffe7f3', obstacle: '#9b4f96' },
+  { id: 'sea', name: '海の世界', start: 1000, sky: '#8ee7ff', fog: '#8ee7ff', track: '#54d2c7', lane: '#c7fff8', ground: '#9de7ff', obstacle: '#226a8a' },
+  { id: 'space', name: '宇宙', start: 1500, sky: '#1b2555', fog: '#1b2555', track: '#5f6cff', lane: '#d7dcff', ground: '#10183d', obstacle: '#ffcf5d' },
+]
+
+const INITIAL_SNAPSHOT: EndlessSnapshot = {
   value: 2,
   distance: 0,
   checkpointProgress: 0,
@@ -76,476 +124,686 @@ const INITIAL_ENDLESS_SNAPSHOT: EndlessSnapshot = {
   seed: 1,
   generatedChunks: 0,
   upgrades: {},
+  hearts: KIDS_ENDLESS_CONFIG.initialHearts,
+  stars: 0,
+  merges: 0,
+  highestNumber: 2,
+  activeItems: [],
 }
 
-function cloneStage(stage: StageData): StageData {
-  return {
-    ...stage,
-    track: [...stage.track],
-    balls: [...stage.balls],
-    obstacles: [...stage.obstacles],
-    movingObstacles: [...stage.movingObstacles],
-    gaps: [...stage.gaps],
-    walls: [...stage.walls],
-    speedBoosts: [...stage.speedBoosts],
-    bonusWalls: [],
-  }
+type EndlessGameProps = {
+  records: EndlessBestRecords
+  soundEnabled: boolean
+  onRecordsChange: (records: EndlessBestRecords) => void
+  onHome: () => void
 }
 
-function intersectsCircleRect(x: number, z: number, radius: number, rect: { x: number; z: number; width: number; depth: number }) {
-  const closestX = Math.max(rect.x - rect.width / 2, Math.min(x, rect.x + rect.width / 2))
-  const closestZ = Math.max(rect.z - rect.depth / 2, Math.min(z, rect.z + rect.depth / 2))
-  const dx = x - closestX
-  const dz = z - closestZ
+function getDifficulty(distance: number) {
+  if (distance < 300) return 1
+  if (distance < 700) return 2
+  if (distance < 1200) return 3
+  if (distance < 2000) return 4
+  return 5 + Math.floor((distance - 2000) / 700)
+}
+
+function getTheme(distance: number) {
+  const cycleDistance = distance < 2000 ? distance : 500 + ((distance - 2000) % 1500)
+  return [...THEMES].reverse().find((theme) => cycleDistance >= theme.start) ?? THEMES[0]
+}
+
+function smallerNumber(value: BallNumber) {
+  return NUMBER_ORDER[Math.max(NUMBER_ORDER.indexOf(value) - 1, 0)]
+}
+
+function largerNumber(value: BallNumber) {
+  return NUMBER_ORDER[Math.min(NUMBER_ORDER.indexOf(value) + 1, NUMBER_ORDER.length - 1)]
+}
+
+function resolveNumber(value: BallNumber, mode: NumberMode) {
+  if (mode === 'same') return value
+  if (mode === 'smaller') return smallerNumber(value)
+  return largerNumber(value)
+}
+
+function circleHit(a: { x: number; z: number; radius: number }, b: { x: number; z: number; radius: number }) {
+  const dx = a.x - b.x
+  const dz = a.z - b.z
+  const radius = a.radius + b.radius
   return dx * dx + dz * dz < radius * radius
 }
 
-function makeSnapshot(player: PlayerRuntime, seed: number, upgrades: UpgradeLevels, generatedChunks: number): EndlessSnapshot {
-  const checkpointStart = Math.max(0, (player.nextCheckpointChunk - ENDLESS_CONFIG.chunksPerCheckpoint) * 50)
-  const checkpointEnd = Math.max(checkpointStart + 1, player.nextCheckpointChunk * 50)
+function activeItemLabels(player: PlayerRuntime) {
+  const labels: string[] = []
+  if (player.magnetTimer > 0) labels.push('磁石')
+  if (player.slowItemTimer > 0) labels.push('スロー')
+  if (player.rainbow) labels.push('虹')
+  if (player.giantTimer > 0) labels.push('巨大')
+  return labels
+}
+
+function makeSnapshot(player: PlayerRuntime, seed: number, rowCount: number): EndlessSnapshot {
+  const distanceScore = Math.floor(Math.max(0, player.z) * 2)
+  const evolutionBonus = 1 + player.evolutionCount * 0.2
   return {
     value: player.value,
     distance: Math.max(0, player.z),
-    checkpointProgress: Math.min(Math.max((player.z - checkpointStart) / (checkpointEnd - checkpointStart), 0), 1),
-    combo: player.combo,
-    maxCombo: player.maxCombo,
-    score: Math.floor(player.score + Math.max(0, player.z) * SCORE_CONFIG.distancePoint),
-    wallsDestroyed: player.wallsDestroyed,
-    shields: player.shields,
-    evolutionRank: player.evolutionRank,
+    checkpointProgress: 0,
+    combo: 0,
+    maxCombo: 0,
+    score: Math.floor((player.score + distanceScore) * evolutionBonus),
+    wallsDestroyed: player.obstaclesBroken,
+    shields: player.shield ? 1 : 0,
+    evolutionRank: player.evolutionCount + 1,
     evolutionCount: player.evolutionCount,
-    difficultyLevel: player.difficultyLevel,
+    difficultyLevel: getDifficulty(player.z),
     seed,
-    generatedChunks,
-    upgrades,
+    generatedChunks: rowCount,
+    upgrades: {},
+    hearts: player.hearts,
+    stars: player.stars,
+    merges: player.merges,
+    highestNumber: player.highestNumber,
+    activeItems: activeItemLabels(player),
   }
 }
 
-function EndlessLoop({
+function isSafe(content: LaneContent) {
+  return content.type !== 'obstacle' && !(content.type === 'numberBall' && content.valueMode === 'larger')
+}
+
+function hasSafeLane(pattern: RowPattern) {
+  return pattern.lanes.some(isSafe)
+}
+
+function chooseItem(rng: SeededRandom, hearts: number, lastItem: ItemType | null): ItemType {
+  const items: ItemType[] = hearts <= 1 ? ['shield', 'magnet', 'slow', 'rainbow', 'giant'] : ['shield', 'magnet', 'slow', 'rainbow', 'giant']
+  const picked = rng.pick(items.filter((item) => item !== lastItem))
+  return picked ?? 'shield'
+}
+
+function chooseEvent(rng: SeededRandom, player: PlayerRuntime, lastEvent: EventType | null): EventType {
+  const events: EventType[] = player.hearts <= 1 ? ['heartChance', 'starRush', 'mergeRush', 'giantRush'] : ['mergeRush', 'starRush', 'giantRush', 'heartChance']
+  return rng.pick(events.filter((event) => event !== lastEvent)) ?? 'starRush'
+}
+
+function buildEventRows(eventType: EventType, startZ: number, rng: SeededRandom): GeneratedRow[] {
+  const rows: GeneratedRow[] = []
+  const push = (index: number, lanes: [LaneContent, LaneContent, LaneContent]) => {
+    rows.push({ id: `event-${eventType}-${startZ}-${index}`, patternId: eventType, z: startZ + index * KIDS_ENDLESS_CONFIG.rowSpacing, difficulty: 1, eventType, lanes })
+  }
+  if (eventType === 'mergeRush') {
+    for (let i = 0; i < 5; i += 1) {
+      const lane = rng.integer(0, 2) as LaneIndex
+      const lanes: [LaneContent, LaneContent, LaneContent] = [EMPTY, EMPTY, EMPTY]
+      lanes[lane] = { type: 'numberBall', valueMode: 'same' }
+      push(i, lanes)
+    }
+    return rows
+  }
+  if (eventType === 'starRush') {
+    for (let i = 0; i < 6; i += 1) {
+      const lane = (i % 3) as LaneIndex
+      const lanes: [LaneContent, LaneContent, LaneContent] = [EMPTY, EMPTY, EMPTY]
+      lanes[lane] = { type: 'star', count: 3 }
+      if (i === 3) lanes[(lane + 1) % 3 as LaneIndex] = { type: 'obstacle', obstacleType: 'block' }
+      push(i, lanes)
+    }
+    return rows
+  }
+  if (eventType === 'giantRush') {
+    push(0, [{ type: 'item', itemType: 'giant' }, EMPTY, { type: 'star', count: 1 }])
+    for (let i = 1; i < 6; i += 1) {
+      const safeLane = rng.integer(0, 2) as LaneIndex
+      const lanes: [LaneContent, LaneContent, LaneContent] = [{ type: 'obstacle', obstacleType: 'block' }, { type: 'obstacle', obstacleType: 'block' }, { type: 'obstacle', obstacleType: 'block' }]
+      lanes[safeLane] = { type: 'star', count: 1 }
+      push(i, lanes)
+    }
+    return rows
+  }
+  push(0, [EMPTY, { type: 'heart' }, EMPTY])
+  push(1, [{ type: 'star', count: 3 }, EMPTY, { type: 'item', itemType: 'shield' }])
+  push(2, [EMPTY, { type: 'star', count: 3 }, EMPTY])
+  return rows
+}
+
+function StarObject({ x, z, count, hidden }: { x: number; z: number; count: number; hidden: boolean }) {
+  if (hidden) return null
+  return (
+    <group>
+      {Array.from({ length: count }, (_, index) => (
+        <Billboard key={index} follow position={[x, 1.05, z + (index - (count - 1) / 2) * 0.95]}>
+          <Text color="#ffd84d" fontSize={0.72} outlineWidth={0.035} outlineColor="#7a5600" material-depthTest={false}>
+            ★
+          </Text>
+        </Billboard>
+      ))}
+    </group>
+  )
+}
+
+function ItemObject({ type, x, z, hidden }: { type: ItemType | 'heart'; x: number; z: number; hidden: boolean }) {
+  if (hidden) return null
+  const icon = type === 'shield' ? '◆' : type === 'magnet' ? 'U' : type === 'slow' ? 'S' : type === 'rainbow' ? '◎' : type === 'giant' ? 'G' : '♥'
+  const color = type === 'shield' ? '#65b7ff' : type === 'magnet' ? '#ff5f7a' : type === 'slow' ? '#9c8cff' : type === 'rainbow' ? '#ffe45d' : type === 'giant' ? '#58e38b' : '#ff5f7a'
+  return (
+    <group position={[x, 0, z]}>
+      <mesh position={[0, 0.72, 0]}>
+        <sphereGeometry args={[0.48, 18, 14]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.22} />
+      </mesh>
+      <Billboard follow position={[0, 0.74, -0.5]} renderOrder={20}>
+        <Text color="#172033" fontSize={0.48} fontWeight={900} outlineWidth={0.025} outlineColor="#ffffff" material-depthTest={false}>
+          {icon}
+        </Text>
+      </Billboard>
+    </group>
+  )
+}
+
+function NumberObject({ value, x, z, hidden }: { value: BallNumber; x: number; z: number; hidden: boolean }) {
+  if (hidden) return null
+  const style = NUMBER_STYLES[value]
+  return (
+    <group position={[x, 0, z]}>
+      <mesh position={[0, GAME_CONFIG.courseSurfaceY + style.radius, 0]}>
+        <sphereGeometry args={[style.radius, 24, 18]} />
+        <meshStandardMaterial color={style.color} emissive={style.emissive} emissiveIntensity={style.glow} />
+      </mesh>
+      <Billboard follow position={[0, GAME_CONFIG.courseSurfaceY + style.radius, -(style.radius + 0.08)]} renderOrder={20}>
+        <Text color={style.textColor} fontSize={style.radius * (value >= 1024 ? 0.44 : 0.54)} fontWeight={900} outlineWidth={0.03} outlineColor={style.textColor === '#ffffff' ? '#172033' : '#ffffff'} material-depthTest={false}>
+          {value}
+        </Text>
+      </Billboard>
+    </group>
+  )
+}
+
+function ObstacleObject({ type, x, z, hidden, theme }: { type: ObstacleType; x: number; z: number; hidden: boolean; theme: (typeof THEMES)[number] }) {
+  if (hidden) return null
+  if (type === 'gate') {
+    return (
+      <group position={[x, 0, z]}>
+        <mesh position={[-0.36, 0.8, 0]}>
+          <boxGeometry args={[0.28, 1.6, 0.45]} />
+          <meshStandardMaterial color={theme.obstacle} />
+        </mesh>
+        <mesh position={[0.36, 0.8, 0]}>
+          <boxGeometry args={[0.28, 1.6, 0.45]} />
+          <meshStandardMaterial color={theme.obstacle} />
+        </mesh>
+      </group>
+    )
+  }
+  if (type === 'rotatingBar') {
+    return (
+      <group position={[x, 0.65, z]} rotation={[0, 0, Math.PI / 9]}>
+        <mesh>
+          <boxGeometry args={[1.65, 0.24, 0.42]} />
+          <meshStandardMaterial color={theme.obstacle} />
+        </mesh>
+      </group>
+    )
+  }
+  return (
+    <mesh position={[x, 0.65, z]}>
+      <boxGeometry args={[1.15, 1.3, 1.05]} />
+      <meshStandardMaterial color={theme.obstacle} roughness={0.55} />
+    </mesh>
+  )
+}
+
+function LaneCourse({ rows, theme }: { rows: GeneratedRow[]; theme: (typeof THEMES)[number] }) {
+  const startZ = Math.max(-20, (rows[0]?.z ?? 0) - 20)
+  const endZ = rows.at(-1)?.z ?? 160
+  const length = endZ - startZ + 80
+  return (
+    <>
+      <mesh position={[0, -0.08, startZ + length / 2]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[90, length + 50]} />
+        <meshStandardMaterial color={theme.ground} roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 0, startZ + length / 2]}>
+        <boxGeometry args={[6.6, 0.18, length]} />
+        <meshStandardMaterial color={theme.track} roughness={0.74} />
+      </mesh>
+      {LANES.map((x) => (
+        <mesh key={x} position={[x, 0.105, startZ + length / 2]}>
+          <boxGeometry args={[0.06, 0.025, length]} />
+          <meshBasicMaterial color={theme.lane} transparent opacity={0.58} />
+        </mesh>
+      ))}
+    </>
+  )
+}
+
+function RowObjects({ rows, hiddenIds, playerValue, theme }: { rows: GeneratedRow[]; hiddenIds: Set<string>; playerValue: BallNumber; theme: (typeof THEMES)[number] }) {
+  return (
+    <>
+      {rows.map((row) => row.lanes.map((content, laneIndex) => {
+        const x = LANES[laneIndex]
+        const id = `${row.id}-${laneIndex}`
+        if (content.type === 'star') return <StarObject key={id} x={x} z={row.z} count={content.count ?? 1} hidden={hiddenIds.has(id)} />
+        if (content.type === 'item') return <ItemObject key={id} type={content.itemType} x={x} z={row.z} hidden={hiddenIds.has(id)} />
+        if (content.type === 'heart') return <ItemObject key={id} type="heart" x={x} z={row.z} hidden={hiddenIds.has(id)} />
+        if (content.type === 'numberBall') return <NumberObject key={id} value={resolveNumber(playerValue, content.valueMode)} x={x} z={row.z} hidden={hiddenIds.has(id)} />
+        if (content.type === 'obstacle') return <ObstacleObject key={id} type={content.obstacleType} x={x} z={row.z} hidden={hiddenIds.has(id)} theme={theme} />
+        return null
+      }))}
+    </>
+  )
+}
+
+function KidsLoop({
   phase,
   controlsRef,
-  soundEnabled,
   seed,
-  upgrades,
-  setStage,
+  soundEnabled,
   onSnapshot,
-  onCheckpoint,
   onGameOver,
 }: {
   phase: EndlessPhase
   controlsRef: React.RefObject<InputControls>
-  soundEnabled: boolean
   seed: number
-  upgrades: UpgradeLevels
-  setStage: (stage: StageData) => void
+  soundEnabled: boolean
   onSnapshot: (snapshot: EndlessSnapshot) => void
-  onCheckpoint: (snapshot: EndlessSnapshot) => void
   onGameOver: (snapshot: EndlessSnapshot) => void
 }) {
   const rngRef = useRef(new SeededRandom(seed))
-  const generatorRef = useRef(createInitialGeneratorState())
   const playerRef = useRef<PlayerRuntime>({
     x: 0,
     z: 0,
+    lane: 1,
     value: 2,
+    highestNumber: 2,
     radius: NUMBER_STYLES[2].radius,
-    elapsedTime: 0,
-    combo: 0,
-    comboTimer: 0,
-    maxCombo: 0,
+    hearts: KIDS_ENDLESS_CONFIG.initialHearts,
+    stars: 0,
     score: 0,
-    wallsDestroyed: 0,
-    speedBoostTimer: 0,
-    speedMultiplier: 1,
-    currentSpeed: ENDLESS_CONFIG.initialSpeed,
+    merges: 0,
+    deflects: 0,
+    obstaclesBroken: 0,
+    evolutionCount: 0,
+    elapsedTime: 0,
+    currentSpeed: KIDS_ENDLESS_CONFIG.initialSpeed,
     slowTimer: 0,
+    invincibleTimer: 0,
     mergePulse: 0,
     shake: 0,
-    invincibleTimer: 0,
-    shields: 0,
-    evolutionRank: 1,
-    evolutionCount: 0,
-    difficultyLevel: 1,
-    checkpointIndex: 0,
-    nextCheckpointChunk: ENDLESS_CONFIG.chunksPerCheckpoint,
-    recoveryCharges: 0,
-    comboShieldCooldown: 0,
-    recentDamage: 0,
-    evolutionJustHappenedTimer: 0,
+    shield: false,
+    magnetTimer: 0,
+    slowItemTimer: 0,
+    rainbow: false,
+    giantTimer: 0,
+    lastMergeZ: -999,
+    lastDamageZ: -999,
   })
+  const rowsRef = useRef<GeneratedRow[]>([])
+  const rowIndexRef = useRef(0)
+  const lastPatternRef = useRef<string[]>([])
+  const lastMergeRowRef = useRef(-99)
+  const nextMergeGapRef = useRef(3)
+  const lastItemRowRef = useRef(-99)
+  const lastItemRef = useRef<ItemType | null>(null)
+  const lastEventRef = useRef<EventType | null>(null)
+  const nextEventRowRef = useRef(999)
+  const hiddenRef = useRef(new Set<string>())
+  const hitRef = useRef(new Set<string>())
   const playerRootRef = useRef<Group>(null)
   const playerSphereRef = useRef<Group>(null)
   const cameraPlayerRef = useRef({ x: 0, z: 0 })
   const shakeRef = useRef(0)
-  const speedRef = useRef<number>(ENDLESS_CONFIG.initialSpeed)
-  const collectedRef = useRef(new Set<string>())
-  const hitRef = useRef(new Set<string>())
-  const hiddenWallRef = useRef(new Set<string>())
-  const hiddenObstacleRef = useRef(new Set<string>())
-  const hiddenBoostRef = useRef(new Set<string>())
-  const [collectedIds, setCollectedIds] = useState<Set<string>>(() => new Set())
-  const [hiddenWallIds, setHiddenWallIds] = useState<Set<string>>(() => new Set())
-  const [hiddenObstacleIds] = useState<Set<string>>(() => new Set())
-  const [hiddenBoostIds, setHiddenBoostIds] = useState<Set<string>>(() => new Set())
+  const speedRef = useRef<number>(KIDS_ENDLESS_CONFIG.initialSpeed)
+  const previousXRef = useRef(0)
+  const lastHudRef = useRef(0)
+  const switchCooldownRef = useRef(0)
+  const themeMessageTimerRef = useRef(0)
+  const eventMessageTimerRef = useRef(0)
+  const currentThemeIdRef = useRef<ThemeId>('sky')
+  const finishedRef = useRef(false)
+  const [rows, setRows] = useState<GeneratedRow[]>([])
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set())
   const [playerValue, setPlayerValue] = useState<BallNumber>(2)
   const [bursts, setBursts] = useState<Burst[]>([])
-  const lastHudRef = useRef(0)
-  const previousXRef = useRef(0)
-  const finishedRef = useRef(false)
-  const initializedRef = useRef(false)
-  const upgradesRef = useRef(upgrades)
-  const appliedUpgradeLevelsRef = useRef<UpgradeLevels>({})
-  upgradesRef.current = upgrades
+  const [theme, setTheme] = useState(() => THEMES[0])
+  const [themeMessage, setThemeMessage] = useState('')
+  const [eventMessage, setEventMessage] = useState('')
 
-  const director = useCallback((): DirectorState => {
+  const addHidden = (id: string) => {
+    hiddenRef.current.add(id)
+    setHiddenIds(new Set(hiddenRef.current))
+  }
+
+  const addStars = (count: number) => {
     const player = playerRef.current
-    return {
-      currentValue: player.value,
-      difficultyLevel: player.difficultyLevel,
-      recentDamage: player.recentDamage,
-      recentCourseOut: false,
-      shieldCount: player.shields,
-      combo: player.combo,
-      evolutionJustHappened: player.evolutionJustHappenedTimer > 0,
-    }
-  }, [])
-
-  const refreshStage = useCallback(() => {
-    const generator = generatorRef.current
-    if (!validateGeneratedStage(generator.stage)) {
-      return
-    }
-    setStage(cloneStage(generator.stage))
-  }, [setStage])
-
-  const initialize = useCallback(() => {
-    if (initializedRef.current) {
-      return
-    }
-    initializedRef.current = true
-    generateAhead(generatorRef.current, rngRef.current, director(), playerRef.current.z)
-    refreshStage()
-  }, [director, refreshStage])
-
-  useEffect(() => {
-    initialize()
-  }, [initialize])
-
-  const resetCombo = () => {
-    const player = playerRef.current
-    player.combo = 0
-    player.comboTimer = 0
+    player.stars += count
+    player.score += count * 120
   }
 
   const applyDamage = (sourceX: number) => {
     const player = playerRef.current
-    const effects = getUpgradeEffects(upgradesRef.current)
-    if (player.invincibleTimer > 0) {
+    if (player.invincibleTimer > 0 || player.giantTimer > 0) return
+    if (player.shield) {
+      player.shield = false
+      player.invincibleTimer = 0.8
+      player.shake = 0.45
+      vibrate(12)
       return
     }
-    if (player.shields > 0) {
-      player.shields -= 1
-    } else if (rngRef.current.next() >= effects.numberGuardChance) {
-      if (player.value === 2) {
-        finishedRef.current = true
-        playTone('gameOver', soundEnabled)
-        vibrate(60)
-        onGameOver(makeSnapshot(player, seed, upgradesRef.current, generatorRef.current.nextIndex))
-        return
-      }
-      player.value = previousNumber(player.value)
-      player.radius = Math.min(NUMBER_STYLES[player.value].radius, GAME_CONFIG.maxPlayerRadius)
-      setPlayerValue(player.value)
-    }
-    player.x += (player.x >= sourceX ? 1 : -1) * GAME_CONFIG.obstacleBounce
-    controlsRef.current.targetX = player.x
-    player.slowTimer = GAME_CONFIG.slowDuration
-    player.invincibleTimer = ENDLESS_CONFIG.damageInvincibleSeconds
-    player.shake = 0.85
-    player.recentDamage += 1
-    resetCombo()
+    player.hearts -= 1
+    player.lastDamageZ = player.z
+    player.invincibleTimer = KIDS_ENDLESS_CONFIG.damageInvincibleSeconds
+    player.slowTimer = KIDS_ENDLESS_CONFIG.damageSlowSeconds
+    player.x += (player.x >= sourceX ? 1 : -1) * 0.6
+    player.shake = 0.9
     playTone('hit', soundEnabled)
-    vibrate(22)
-  }
-
-  const evolve = () => {
-    const player = playerRef.current
-    player.evolutionCount += 1
-    player.evolutionRank += 1
-    player.value = 2
-    player.radius = NUMBER_STYLES[2].radius
-    setPlayerValue(player.value)
-    player.invincibleTimer = ENDLESS_CONFIG.evolutionInvincibleSeconds
-    player.evolutionJustHappenedTimer = ENDLESS_CONFIG.evolutionInvincibleSeconds
-    player.score += SCORE_CONFIG.evolution * (1 + player.evolutionCount * SCORE_CONFIG.rankMultiplierStep)
-    player.shake = 1
-    playTone('clear', soundEnabled)
-    vibrate([18, 30, 18])
-  }
-
-  const mergeBall = (ball: StageBall) => {
-    const player = playerRef.current
-    const effects = getUpgradeEffects(upgradesRef.current)
-    let merged = nextNumber(player.value)
-    if (rngRef.current.next() < effects.doubleUpChance) {
-      merged = nextNumber(merged)
+    vibrate(30)
+    if (player.hearts <= 0) {
+      finishedRef.current = true
+      onGameOver(makeSnapshot(player, seed, rowIndexRef.current))
     }
-    player.combo += 1
-    player.comboTimer = effects.comboTimeout
-    player.maxCombo = Math.max(player.maxCombo, player.combo)
-    player.value = merged
-    player.radius = Math.min(NUMBER_STYLES[merged].radius, GAME_CONFIG.maxPlayerRadius)
-    setPlayerValue(player.value)
+  }
+
+  const recoverFromFall = () => {
+    const player = playerRef.current
+    if (player.invincibleTimer > 0) return
+    player.hearts -= 1
+    player.lane = 1
+    player.x = 0
+    controlsRef.current.targetX = 0
+    player.invincibleTimer = KIDS_ENDLESS_CONFIG.fallInvincibleSeconds
+    player.shake = 0.8
+    if (player.hearts <= 0) {
+      finishedRef.current = true
+      onGameOver(makeSnapshot(player, seed, rowIndexRef.current))
+    }
+  }
+
+  const mergeNumber = (id: string, x: number, z: number) => {
+    const player = playerRef.current
+    const next = nextNumber(player.value)
+    player.value = next
+    player.highestNumber = Math.max(player.highestNumber, next) as BallNumber
+    player.radius = Math.min(NUMBER_STYLES[next].radius, GAME_CONFIG.maxPlayerRadius)
+    player.merges += 1
+    player.score += 500 + next * 8
     player.mergePulse = 1
-    player.shake = player.combo >= 2 ? 0.75 : 0.35
-    player.score += (SCORE_CONFIG.mergeBase + merged * 8 + player.combo * SCORE_CONFIG.comboStep) * effects.comboScoreMultiplier
-    if (effects.comboShieldLevel > 0 && player.combo >= 5 && player.comboShieldCooldown <= 0) {
-      player.shields = Math.min(player.shields + 1, ENDLESS_CONFIG.maxShieldCount)
-      player.comboShieldCooldown = Math.max(4.5 - effects.comboShieldLevel, 2)
-    }
-    collectedRef.current.add(ball.id)
-    setCollectedIds(new Set(collectedRef.current))
-    setBursts((current) => [...current.slice(-ENDLESS_CONFIG.maxVisibleBursts), { id: performance.now(), x: ball.x, z: ball.z, color: NUMBER_STYLES[merged].color }])
-    if (merged === 2048) {
-      evolve()
+    player.shake = 0.45
+    player.lastMergeZ = player.z
+    setPlayerValue(next)
+    addHidden(id)
+    setBursts((current) => [...current.slice(-4), { id: performance.now(), x, z, color: NUMBER_STYLES[next].color }])
+    if (next === 2048) {
+      player.evolutionCount += 1
+      player.value = 2
+      player.radius = NUMBER_STYLES[2].radius
+      player.invincibleTimer = 2
+      setPlayerValue(2)
+      player.score += 4000
+      setThemeMessage('進化！')
+      themeMessageTimerRef.current = 1.1
     }
     playTone('merge', soundEnabled)
     vibrate([12, 24, 12])
   }
 
-  const checkBalls = (stage: StageData) => {
+  const collectItem = (content: LaneContent, id: string) => {
     const player = playerRef.current
-    const effects = getUpgradeEffects(upgradesRef.current)
-    for (const ball of stage.balls) {
-      if (collectedRef.current.has(ball.id) || ball.z < player.z - 2.5 || ball.z > player.z + 2.8) {
-        continue
-      }
-      const dx = player.x - ball.x
-      const dz = player.z - ball.z
-      const ballRadius = NUMBER_STYLES[ball.value].radius
-      if (ball.value === player.value && Math.sqrt(dx * dx + dz * dz) < player.radius + ballRadius + effects.magnetRange) {
-        ball.x += Math.sign(dx) * 0.018
-      }
-      const hitRadius = player.radius + ballRadius + effects.mergeRange
-      if (dx * dx + dz * dz < hitRadius * hitRadius) {
-        if (ball.value === player.value) {
-          mergeBall(ball)
-        } else if (!hitRef.current.has(ball.id)) {
-          hitRef.current.add(ball.id)
-          applyDamage(ball.x)
-        }
-      }
-    }
-  }
-
-  const checkObstacles = (stage: StageData) => {
-    const player = playerRef.current
-    const obstacles: StageObstacle[] = [
-      ...stage.obstacles,
-      ...stage.movingObstacles.map((obstacle) => ({ ...obstacle, x: getMovingObstacleX(obstacle, player.elapsedTime) })),
-    ]
-    for (const obstacle of obstacles) {
-      if (hitRef.current.has(obstacle.id) || hiddenObstacleRef.current.has(obstacle.id) || obstacle.z < player.z - 2.5 || obstacle.z > player.z + 2.8) {
-        continue
-      }
-      if (intersectsCircleRect(player.x, player.z, player.radius, obstacle)) {
-        hitRef.current.add(obstacle.id)
-        applyDamage(obstacle.x)
-        return
-      }
-    }
-  }
-
-  const checkWalls = (stage: StageData) => {
-    const player = playerRef.current
-    const effects = getUpgradeEffects(upgradesRef.current)
-    for (const wall of stage.walls) {
-      if (hiddenWallRef.current.has(wall.id) || wall.z < player.z - 2.5 || wall.z > player.z + 3) {
-        continue
-      }
-      if (!intersectsCircleRect(player.x, player.z, player.radius, { x: wall.x, z: wall.z, width: wall.width, depth: 0.7 })) {
-        continue
-      }
-      if (player.value >= wall.value) {
-        hiddenWallRef.current.add(wall.id)
-        setHiddenWallIds(new Set(hiddenWallRef.current))
-        player.wallsDestroyed += 1
-        player.score += SCORE_CONFIG.wallBase * effects.wallScoreMultiplier * wall.value
-        player.shake = 0.9
-        setBursts((current) => [...current.slice(-ENDLESS_CONFIG.maxVisibleBursts), { id: performance.now(), x: wall.x, z: wall.z, color: NUMBER_STYLES[wall.value].color }])
-        vibrate(24)
-      } else {
-        applyDamage(wall.x)
-      }
+    if (content.type === 'heart') {
+      if (player.hearts < KIDS_ENDLESS_CONFIG.maximumHearts) player.hearts += 1
+      else addStars(5)
+      addHidden(id)
       return
     }
+    if (content.type !== 'item') return
+    if (content.itemType === 'shield') {
+      if (player.shield) addStars(4)
+      player.shield = true
+    } else if (content.itemType === 'magnet') {
+      player.magnetTimer = KIDS_ENDLESS_CONFIG.magnetDurationSeconds
+    } else if (content.itemType === 'slow') {
+      player.slowItemTimer = KIDS_ENDLESS_CONFIG.slowDurationSeconds
+    } else if (content.itemType === 'rainbow') {
+      player.rainbow = true
+    } else {
+      player.giantTimer = KIDS_ENDLESS_CONFIG.giantDurationSeconds
+    }
+    player.score += 180
+    addHidden(id)
+    vibrate(10)
   }
 
-  const checkBoosts = (stage: StageData) => {
+  const generateRow = () => {
     const player = playerRef.current
-    for (const boost of stage.speedBoosts) {
-      if (hiddenBoostRef.current.has(boost.id) || boost.z < player.z - 2.5 || boost.z > player.z + 2.8) {
-        continue
-      }
-      const dx = player.x - boost.x
-      const dz = player.z - boost.z
-      const hitRadius = player.radius + boost.radius
-      if (dx * dx + dz * dz < hitRadius * hitRadius) {
-        hiddenBoostRef.current.add(boost.id)
-        setHiddenBoostIds(new Set(hiddenBoostRef.current))
-        player.speedBoostTimer = boost.duration
-        player.speedMultiplier = boost.multiplier
-        player.score += SCORE_CONFIG.riskyRoute * getUpgradeEffects(upgradesRef.current).riskRewardMultiplier
-        player.shake = 0.35
-      }
+    const index = rowIndexRef.current
+    const z = index * KIDS_ENDLESS_CONFIG.rowSpacing + 18
+    const difficulty = getDifficulty(z)
+    if (index === 0) {
+      rowIndexRef.current += 1
+      return { id: `row-${index}`, patternId: 'start-star', z, difficulty, lanes: [EMPTY, { type: 'star', count: 3 }, EMPTY] as [LaneContent, LaneContent, LaneContent] }
     }
+
+    if (index >= nextEventRowRef.current && z > KIDS_ENDLESS_CONFIG.eventMinimumDistance) {
+      const eventType = chooseEvent(rngRef.current, player, lastEventRef.current)
+      const eventRows = buildEventRows(eventType, z, rngRef.current)
+      lastEventRef.current = eventType
+      nextEventRowRef.current = index + rngRef.current.integer(KIDS_ENDLESS_CONFIG.eventMinimumGapRows, KIDS_ENDLESS_CONFIG.eventMaximumGapRows)
+      rowIndexRef.current += eventRows.length
+      setEventMessage(eventType === 'mergeRush' ? '合体ラッシュ' : eventType === 'starRush' ? 'スターラッシュ' : eventType === 'giantRush' ? '巨大化ラッシュ' : 'ハートチャンス')
+      eventMessageTimerRef.current = 1.2
+      return eventRows
+    }
+
+    const recent = new Set(lastPatternRef.current.slice(-4))
+    const shouldMerge = index - lastMergeRowRef.current >= nextMergeGapRef.current && index - Math.floor(player.lastMergeZ / KIDS_ENDLESS_CONFIG.rowSpacing) > KIDS_ENDLESS_CONFIG.mergeCooldownRows
+    const candidates = ROW_PATTERNS.filter((pattern) => {
+      if (pattern.minimumDifficulty > difficulty) return false
+      if (pattern.maximumDifficulty && pattern.maximumDifficulty < difficulty) return false
+      if (!hasSafeLane(pattern)) return false
+      if (recent.has(pattern.id)) return false
+      const hasMerge = pattern.lanes.some((lane) => lane.type === 'numberBall' && lane.valueMode === 'same')
+      if (hasMerge && !shouldMerge) return false
+      if (!hasMerge && shouldMerge && pattern.tags.includes('merge')) return true
+      const hasItem = pattern.lanes.some((lane) => lane.type === 'item')
+      if (hasItem && index - lastItemRowRef.current < KIDS_ENDLESS_CONFIG.itemMinimumGapRows) return false
+      return true
+    })
+    const fallback = shouldMerge ? ROW_PATTERNS.find((pattern) => pattern.id === 'center-merge-choice')! : ROW_PATTERNS[0]
+    const pattern = candidates.length > 0 ? rngRef.current.weightedPick(candidates, (item) => {
+      let weight = item.weight
+      if (player.hearts <= 1 && item.tags.includes('heart')) weight *= 4
+      if (player.value === 2 && item.tags.includes('merge')) weight *= 1.6
+      return weight
+    }) : fallback
+    let lanes = pattern.lanes.map((lane) => ({ ...lane })) as [LaneContent, LaneContent, LaneContent]
+    lanes = lanes.map((lane) => lane.type === 'item' ? { type: 'item', itemType: chooseItem(rngRef.current, player.hearts, lastItemRef.current) } : lane) as [LaneContent, LaneContent, LaneContent]
+    if (lanes.some((lane) => lane.type === 'numberBall' && lane.valueMode === 'same')) {
+      lastMergeRowRef.current = index
+      nextMergeGapRef.current = rngRef.current.integer(KIDS_ENDLESS_CONFIG.minimumMergeRowGap, KIDS_ENDLESS_CONFIG.maximumMergeRowGap)
+    }
+    const itemLane = lanes.find((lane): lane is { type: 'item'; itemType: ItemType } => lane.type === 'item')
+    if (itemLane) {
+      lastItemRowRef.current = index
+      lastItemRef.current = itemLane.itemType
+    }
+    lastPatternRef.current.push(pattern.id)
+    rowIndexRef.current += 1
+    return { id: `row-${index}`, patternId: pattern.id, z, difficulty, lanes }
   }
+
+  const ensureRows = () => {
+    const playerZ = playerRef.current.z
+    let changed = false
+    while (rowsRef.current.length === 0 || (rowsRef.current.at(-1)?.z ?? 0) < playerZ + KIDS_ENDLESS_CONFIG.rowsAhead * KIDS_ENDLESS_CONFIG.rowSpacing) {
+      const next = generateRow()
+      rowsRef.current.push(...(Array.isArray(next) ? next : [next]))
+      changed = true
+    }
+    const keepFrom = playerZ - KIDS_ENDLESS_CONFIG.rowsBehind * KIDS_ENDLESS_CONFIG.rowSpacing - KIDS_ENDLESS_CONFIG.pruneBehindDistance
+    const before = rowsRef.current.length
+    rowsRef.current = rowsRef.current.filter((row) => row.z > keepFrom)
+    if (before !== rowsRef.current.length) changed = true
+    if (changed) setRows([...rowsRef.current])
+  }
+
+  useEffect(() => {
+    ensureRows()
+  }, [])
 
   useFrame((_, delta) => {
     const player = playerRef.current
-    const generator = generatorRef.current
-    const stage = generator.stage
-    const effects = getUpgradeEffects(upgradesRef.current)
-    const previousLevels = appliedUpgradeLevelsRef.current
-    const shieldDiff = (upgradesRef.current.shield ?? 0) - (previousLevels.shield ?? 0)
-    const recoveryDiff = (upgradesRef.current.courseRecovery ?? 0) - (previousLevels.courseRecovery ?? 0)
-    if (shieldDiff > 0) {
-      player.shields = Math.min(player.shields + shieldDiff, ENDLESS_CONFIG.maxShieldCount)
-    }
-    if (recoveryDiff > 0) {
-      player.recoveryCharges = Math.min(player.recoveryCharges + recoveryDiff, 1)
-    }
-    appliedUpgradeLevelsRef.current = { ...upgradesRef.current }
-    if (finishedRef.current) {
-      return
-    }
-
+    if (finishedRef.current) return
     player.mergePulse = Math.max(0, player.mergePulse - delta * 2.8)
     player.shake = Math.max(0, player.shake - delta * 3.5)
-    player.comboTimer = Math.max(0, player.comboTimer - delta)
-    player.speedBoostTimer = Math.max(0, player.speedBoostTimer - delta)
-    player.slowTimer = Math.max(0, player.slowTimer - delta)
     player.invincibleTimer = Math.max(0, player.invincibleTimer - delta)
-    player.comboShieldCooldown = Math.max(0, player.comboShieldCooldown - delta)
-    player.evolutionJustHappenedTimer = Math.max(0, player.evolutionJustHappenedTimer - delta)
-    if (player.combo > 0 && player.comboTimer === 0) {
-      resetCombo()
-    }
+    player.slowTimer = Math.max(0, player.slowTimer - delta)
+    player.magnetTimer = Math.max(0, player.magnetTimer - delta)
+    player.slowItemTimer = Math.max(0, player.slowItemTimer - delta)
+    player.giantTimer = Math.max(0, player.giantTimer - delta)
+    switchCooldownRef.current = Math.max(0, switchCooldownRef.current - delta)
+    themeMessageTimerRef.current = Math.max(0, themeMessageTimerRef.current - delta)
+    eventMessageTimerRef.current = Math.max(0, eventMessageTimerRef.current - delta)
+    if (themeMessageTimerRef.current === 0 && themeMessage) setThemeMessage('')
+    if (eventMessageTimerRef.current === 0 && eventMessage) setEventMessage('')
     shakeRef.current = player.shake
 
-    const visualScale = 1 + player.mergePulse * 0.16
+    const visualScale = (1 + player.mergePulse * 0.16) * (player.giantTimer > 0 ? 1.28 : 1)
     if (playerSphereRef.current) {
       playerSphereRef.current.position.y = GAME_CONFIG.courseSurfaceY + player.radius * visualScale
       playerSphereRef.current.scale.setScalar(visualScale)
     }
 
     if (phase !== 'playing') {
-      if (playerRootRef.current) {
-        playerRootRef.current.position.set(player.x, 0, player.z)
-      }
+      if (playerRootRef.current) playerRootRef.current.position.set(player.x, 0, player.z)
       return
     }
 
     player.elapsedTime += delta
     const controls = controlsRef.current
-    controls.targetX += controls.keyboardAxis * GAME_CONFIG.keyboardSpeed * delta
-    controls.targetX = clampToTrack(stage.track, player.z, controls.targetX, player.radius + GAME_CONFIG.trackEdgePadding)
-    player.x += (controls.targetX - player.x) * Math.min(delta * GAME_CONFIG.lateralFollow, 1)
+    if (switchCooldownRef.current === 0) {
+      if (controls.targetX > KIDS_ENDLESS_CONFIG.laneSwitchThreshold || controls.keyboardAxis > 0) {
+        player.lane = Math.min(2, player.lane + 1) as LaneIndex
+        controls.targetX = 0
+        switchCooldownRef.current = 0.16
+      } else if (controls.targetX < -KIDS_ENDLESS_CONFIG.laneSwitchThreshold || controls.keyboardAxis < 0) {
+        player.lane = Math.max(0, player.lane - 1) as LaneIndex
+        controls.targetX = 0
+        switchCooldownRef.current = 0.16
+      }
+    }
+    player.x += (LANES[player.lane] - player.x) * Math.min(delta * KIDS_ENDLESS_CONFIG.laneFollow, 1)
 
-    const difficulty = getDifficultyConfig(player.difficultyLevel)
-    const comboMultiplier = player.combo >= 3 ? 1 + effects.comboSpeedBonus : 1
-    const boostMultiplier = player.speedBoostTimer > 0 ? player.speedMultiplier : 1
-    const rankMultiplier = 1 + (player.evolutionRank - 1) * 0.04
-    const targetSpeed = player.slowTimer > 0 ? GAME_CONFIG.slowForwardSpeed : Math.min(difficulty.baseSpeed * comboMultiplier * boostMultiplier * rankMultiplier, difficulty.maxSpeed)
-    player.currentSpeed += (targetSpeed - player.currentSpeed) * Math.min(delta * 3.5, 1)
+    const difficulty = getDifficulty(player.z)
+    const speedMultiplier = Math.min(1 + (difficulty - 1) * 0.11, KIDS_ENDLESS_CONFIG.maximumSpeedMultiplier)
+    const targetSpeed = KIDS_ENDLESS_CONFIG.initialSpeed * speedMultiplier * (player.slowTimer > 0 ? KIDS_ENDLESS_CONFIG.damageSpeedMultiplier : 1) * (player.slowItemTimer > 0 ? 0.72 : 1)
+    player.currentSpeed += (targetSpeed - player.currentSpeed) * Math.min(delta * 3.2, 1)
     speedRef.current = player.currentSpeed
     player.z += player.currentSpeed * delta
 
-    const trackInfo = getTrackInfoAtZ(stage.track, player.z)
-    const edgeAllowance = player.radius * 0.35
-    if (!trackInfo || player.x < trackInfo.left + edgeAllowance || player.x > trackInfo.right - edgeAllowance) {
-      if (effects.hasCourseRecovery && player.recoveryCharges > 0) {
-        player.recoveryCharges -= 1
-        player.x = trackInfo?.centerX ?? 0
-        controls.targetX = player.x
-        player.invincibleTimer = effects.recoveryInvincible
-      } else {
-        finishedRef.current = true
-        playTone('gameOver', soundEnabled)
-        onGameOver(makeSnapshot(player, seed, upgradesRef.current, generator.nextIndex))
-        return
+    if (Math.abs(player.x) > 3.35) recoverFromFall()
+
+    ensureRows()
+    const nextTheme = getTheme(player.z)
+    if (nextTheme.id !== currentThemeIdRef.current) {
+      currentThemeIdRef.current = nextTheme.id
+      setTheme(nextTheme)
+      setThemeMessage(nextTheme.name)
+      themeMessageTimerRef.current = 1.2
+    }
+
+    for (const row of rowsRef.current) {
+      if (row.z < player.z - 2.4 || row.z > player.z + 2.8) continue
+      for (let laneIndex = 0; laneIndex < 3; laneIndex += 1) {
+        const content = row.lanes[laneIndex]
+        const id = `${row.id}-${laneIndex}`
+        if (hiddenRef.current.has(id) || hitRef.current.has(id)) continue
+        const x = LANES[laneIndex]
+        const baseHit = { x, z: row.z, radius: content.type === 'star' ? (player.magnetTimer > 0 ? 2.3 : 0.55) : 0.78 }
+        if (!circleHit({ x: player.x, z: player.z, radius: player.radius * (player.giantTimer > 0 ? 1.2 : 0.86) }, baseHit)) continue
+        if (content.type === 'star') {
+          addStars(content.count ?? 1)
+          addHidden(id)
+        } else if (content.type === 'heart' || content.type === 'item') {
+          collectItem(content, id)
+        } else if (content.type === 'numberBall') {
+          const value = resolveNumber(player.value, content.valueMode)
+          if (player.giantTimer > 0) {
+            player.deflects += 1
+            player.score += 150
+            addHidden(id)
+          } else if (player.rainbow || value === player.value) {
+            player.rainbow = false
+            mergeNumber(id, x, row.z)
+          } else if (value < player.value) {
+            player.deflects += 1
+            player.score += 180
+            addHidden(id)
+            setBursts((current) => [...current.slice(-4), { id: performance.now(), x, z: row.z, color: NUMBER_STYLES[value].color }])
+          } else {
+            hitRef.current.add(id)
+            applyDamage(x)
+          }
+        } else if (content.type === 'obstacle') {
+          if (player.giantTimer > 0) {
+            player.obstaclesBroken += 1
+            player.score += 250
+            addHidden(id)
+            setBursts((current) => [...current.slice(-4), { id: performance.now(), x, z: row.z, color: theme.obstacle }])
+          } else {
+            hitRef.current.add(id)
+            applyDamage(x)
+          }
+        }
       }
-    }
-
-    if (stage.gaps.some((gap) => intersectsCircleRect(player.x, player.z, player.radius * 0.78, gap))) {
-      if (effects.hasCourseRecovery && player.recoveryCharges > 0) {
-        player.recoveryCharges -= 1
-        player.x = trackInfo?.centerX ?? 0
-        controls.targetX = player.x
-        player.invincibleTimer = effects.recoveryInvincible
-      } else {
-        finishedRef.current = true
-        playTone('gameOver', soundEnabled)
-        onGameOver(makeSnapshot(player, seed, upgradesRef.current, generator.nextIndex))
-        return
-      }
-    }
-
-    checkBalls(stage)
-    checkObstacles(stage)
-    checkWalls(stage)
-    checkBoosts(stage)
-
-    const oldGenerated = generator.nextIndex
-    generateAhead(generator, rngRef.current, director(), player.z)
-    pruneBehind(generator, player.z)
-    if (generator.nextIndex !== oldGenerated) {
-      refreshStage()
-    }
-
-    if (generator.generated.length > 0 && player.z > player.nextCheckpointChunk * 50) {
-      player.checkpointIndex += 1
-      player.difficultyLevel += 1
-      player.nextCheckpointChunk += ENDLESS_CONFIG.chunksPerCheckpoint
-      player.score += SCORE_CONFIG.checkpoint
-      player.recentDamage = 0
-      const snapshot = makeSnapshot(player, seed, upgradesRef.current, generator.nextIndex)
-      saveEndlessCheckpoint(snapshot)
-      onCheckpoint(snapshot)
-      return
     }
 
     cameraPlayerRef.current.x = player.x
     cameraPlayerRef.current.z = player.z
-    if (playerRootRef.current) {
-      playerRootRef.current.position.set(player.x, 0, player.z)
-    }
+    if (playerRootRef.current) playerRootRef.current.position.set(player.x, 0, player.z)
     if (playerSphereRef.current) {
       const rollDistance = player.currentSpeed * delta
       const lateralDistance = player.x - previousXRef.current
       playerSphereRef.current.rotation.x -= rollDistance / Math.max(player.radius, 0.1)
-      playerSphereRef.current.rotation.y += rollDistance / Math.max(player.radius * 1.8, 0.1)
       playerSphereRef.current.rotation.z -= lateralDistance / Math.max(player.radius, 0.1)
     }
     previousXRef.current = player.x
 
     lastHudRef.current += delta
-    if (lastHudRef.current > ENDLESS_CONFIG.hudUpdateSeconds) {
+    if (lastHudRef.current > KIDS_ENDLESS_CONFIG.hudUpdateSeconds) {
       lastHudRef.current = 0
-      onSnapshot(makeSnapshot(player, seed, upgradesRef.current, generator.nextIndex))
+      onSnapshot(makeSnapshot(player, seed, rowIndexRef.current))
     }
   })
 
   return (
     <>
-      <fog attach="fog" args={['#aee8ff', 60, 170]} />
-      <hemisphereLight args={['#ffffff', '#9ad8b5', 1.1]} />
-      <ambientLight intensity={0.85} />
-      <directionalLight position={[-4, 8, -3]} intensity={1.8} />
-      <Course stage={generatorRef.current.stage} collectedIds={collectedIds} hiddenObstacleIds={hiddenObstacleIds} hiddenWallIds={hiddenWallIds} hiddenBoostIds={hiddenBoostIds} />
+      <fog attach="fog" args={[theme.fog, 68, 175]} />
+      <hemisphereLight args={['#ffffff', theme.ground, 1.12]} />
+      <ambientLight intensity={0.88} />
+      <directionalLight position={[-4, 8, -3]} intensity={1.7} />
+      <LaneCourse rows={rows} theme={theme} />
+      <RowObjects rows={rows} hiddenIds={hiddenIds} playerValue={playerValue} theme={theme} />
       <PlayerBall ref={playerRootRef} sphereRef={playerSphereRef} value={playerValue} />
+      {playerRef.current.shield && (
+        <mesh position={[playerRef.current.x, GAME_CONFIG.courseSurfaceY + playerRef.current.radius, playerRef.current.z]}>
+          <sphereGeometry args={[playerRef.current.radius * 1.32, 24, 14]} />
+          <meshBasicMaterial color="#65b7ff" transparent opacity={0.22} />
+        </mesh>
+      )}
+      {playerRef.current.rainbow && (
+        <mesh position={[playerRef.current.x, GAME_CONFIG.courseSurfaceY + playerRef.current.radius, playerRef.current.z]}>
+          <torusGeometry args={[playerRef.current.radius * 1.15, 0.045, 8, 48]} />
+          <meshBasicMaterial color="#ffe45d" transparent opacity={0.78} />
+        </mesh>
+      )}
       {bursts.map((burst) => <MergeBurst key={burst.id} burst={burst} />)}
       <FollowCamera playerRef={cameraPlayerRef} shakeRef={shakeRef} speedRef={speedRef} />
+      {(themeMessage || eventMessage) && (
+        <Billboard follow position={[0, 4.2, playerRef.current.z + 13]} renderOrder={30}>
+          <Text color="#ffffff" fontSize={0.9} fontWeight={900} outlineWidth={0.045} outlineColor="#172033" material-depthTest={false}>
+            {eventMessage || themeMessage}
+          </Text>
+        </Billboard>
+      )}
     </>
   )
 }
@@ -555,53 +813,23 @@ export function EndlessGame({ records, soundEnabled, onRecordsChange, onHome }: 
   const [phase, setPhase] = useState<EndlessPhase>('ready')
   const [seed, setSeed] = useState(() => createRunSeed())
   const [runId, setRunId] = useState(0)
-  const [snapshot, setSnapshot] = useState<EndlessSnapshot>({ ...INITIAL_ENDLESS_SNAPSHOT, seed })
-  const [stage, setStage] = useState<StageData>(() => createInitialGeneratorState().stage)
-  const [upgrades, setUpgrades] = useState<UpgradeLevels>({})
-  const [upgradeOptions, setUpgradeOptions] = useState<UpgradeDefinition[]>([])
+  const [snapshot, setSnapshot] = useState<EndlessSnapshot>({ ...INITIAL_SNAPSHOT, seed })
   const [isNewBest, setIsNewBest] = useState(false)
-  const optionsRngRef = useRef(new SeededRandom(seed ^ 0x9e3779b9))
 
   const markStart = useCallback(() => {
-    if (!records.hasSeenEndlessHelp) {
-      onRecordsChange(saveEndlessHelpSeen())
-    }
+    if (!records.hasSeenEndlessHelp) onRecordsChange(saveEndlessHelpSeen())
     setPhase((current) => (current === 'ready' ? 'playing' : current))
   }, [onRecordsChange, records.hasSeenEndlessHelp])
 
   const controlsRef = useInputControls(hostRef, phase, markStart)
 
-  const handleCheckpoint = useCallback(
-    (nextSnapshot: EndlessSnapshot) => {
-      setSnapshot(nextSnapshot)
-      setUpgradeOptions(chooseUpgradeOptions(optionsRngRef.current, upgrades, nextSnapshot.shields))
-      setPhase('checkpoint')
-    },
-    [upgrades],
-  )
-
-  const handleUpgrade = useCallback(
-    (upgrade: UpgradeDefinition) => {
-      const next = applyUpgrade(upgrades, upgrade)
-      setUpgrades(next)
-      setSnapshot((current) => ({ ...current, upgrades: next, difficultyLevel: current.difficultyLevel + 1 }))
-      setPhase('playing')
-    },
-    [upgrades],
-  )
-
-  const handleGameOver = useCallback(
-    (finalSnapshot: EndlessSnapshot) => {
-      const withUpgrades = { ...finalSnapshot, upgrades }
-      setSnapshot(withUpgrades)
-      const result = saveEndlessResult(withUpgrades)
-      onRecordsChange(result.records)
-      setIsNewBest(result.isNewBest)
-      clearEndlessCheckpoint()
-      setPhase('gameOver')
-    },
-    [onRecordsChange, upgrades],
-  )
+  const handleGameOver = useCallback((finalSnapshot: EndlessSnapshot) => {
+    setSnapshot(finalSnapshot)
+    const result = saveEndlessResult(finalSnapshot)
+    onRecordsChange(result.records)
+    setIsNewBest(result.isNewBest)
+    setPhase('gameOver')
+  }, [onRecordsChange])
 
   const retry = useCallback(() => {
     const nextSeed = createRunSeed()
@@ -610,53 +838,28 @@ export function EndlessGame({ records, soundEnabled, onRecordsChange, onHome }: 
     controlsRef.current.hasInteracted = false
     setSeed(nextSeed)
     setRunId((current) => current + 1)
-    setSnapshot({ ...INITIAL_ENDLESS_SNAPSHOT, seed: nextSeed })
-    setStage(createInitialGeneratorState().stage)
-    setUpgrades({})
-    setUpgradeOptions([])
+    setSnapshot({ ...INITIAL_SNAPSHOT, seed: nextSeed })
     setIsNewBest(false)
-    optionsRngRef.current = new SeededRandom(nextSeed ^ 0x9e3779b9)
     onRecordsChange(incrementEndlessPlayCount())
     setPhase('ready')
   }, [controlsRef, onRecordsChange])
 
-  const scene = (
-    <Canvas
-      key={`${runId}-${seed}`}
-      dpr={[1, 1.5]}
-      gl={{ antialias: true, powerPreference: 'high-performance', alpha: true }}
-      onCreated={({ gl, camera }) => {
-        gl.setClearColor('#aee8ff', 0)
-        camera.lookAt(0, 1, 8)
-      }}
-      camera={{ position: [0, 6.4, -8.2], fov: GAME_CONFIG.camera.portraitFov, near: 0.1, far: 180 }}
-    >
-      <EndlessLoop
-        phase={phase}
-        controlsRef={controlsRef}
-        soundEnabled={soundEnabled}
-        seed={seed}
-        upgrades={upgrades}
-        setStage={setStage}
-        onSnapshot={setSnapshot}
-        onCheckpoint={handleCheckpoint}
-        onGameOver={handleGameOver}
-      />
-    </Canvas>
-  )
-
   return (
     <section ref={hostRef} className="endless-root" aria-label="エンドレスモード">
-      {scene}
+      <Canvas
+        key={`${runId}-${seed}`}
+        dpr={[1, 1.5]}
+        gl={{ antialias: true, powerPreference: 'high-performance', alpha: true }}
+        onCreated={({ gl, camera }) => {
+          gl.setClearColor('#aee8ff', 0)
+          camera.lookAt(0, 1, 8)
+        }}
+        camera={{ position: [0, 6.4, -8.2], fov: GAME_CONFIG.camera.portraitFov, near: 0.1, far: 180 }}
+      >
+        <KidsLoop phase={phase} controlsRef={controlsRef} seed={seed} soundEnabled={soundEnabled} onSnapshot={setSnapshot} onGameOver={handleGameOver} />
+      </Canvas>
       <EndlessHud phase={phase} snapshot={snapshot} onPause={() => setPhase('paused')} onResume={() => setPhase('playing')} />
-      {phase === 'checkpoint' && (
-        <CheckpointScreen checkpointNumber={snapshot.difficultyLevel} snapshot={snapshot} options={upgradeOptions} onSelect={handleUpgrade} />
-      )}
-      {phase === 'gameOver' && (
-        <EndlessResultScreen snapshot={snapshot} records={records} isNewBest={isNewBest} onRetry={retry} onHome={onHome} />
-      )}
-      <span className="seed-label">seed {seed}</span>
-      <span className="sr-only">{stage.name}</span>
+      {phase === 'gameOver' && <EndlessResultScreen snapshot={snapshot} records={records} isNewBest={isNewBest} onRetry={retry} onHome={onHome} />}
     </section>
   )
 }

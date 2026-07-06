@@ -1,5 +1,4 @@
 import type { EndlessBestRecords } from '../../types/game'
-import { getEvolutionRankName } from '../../config/evolutionConfig'
 
 type HomeScreenProps = {
   records: EndlessBestRecords
@@ -12,11 +11,11 @@ export function HomeScreen({ records, onStartEndless, onStartTutorial }: HomeScr
     <section className="home-screen">
       <div className="home-inner">
         <p className="home-kicker">Number Ball Run</p>
-        <h1>エンドレスラン</h1>
-        <p className="home-copy">数字を育て、強化を選び、何度進化できるか挑戦します。</p>
+        <h1>ナンバーボールラン</h1>
+        <p className="home-copy">よけて、星を集めて、同じ数字で大きくなろう。</p>
         <div className="home-actions">
           <button className="primary-button wide-button" type="button" onClick={onStartEndless}>
-            エンドレス
+            スタート
           </button>
           <button className="secondary-button wide-button" type="button" onClick={onStartTutorial}>
             遊び方
@@ -32,8 +31,8 @@ export function HomeScreen({ records, onStartEndless, onStartTutorial }: HomeScr
             <dd>{Math.floor(records.longestDistance).toLocaleString()}m</dd>
           </div>
           <div>
-            <dt>最高ランク</dt>
-            <dd>{getEvolutionRankName(records.highestRank)}</dd>
+            <dt>累計スター</dt>
+            <dd>{records.totalStars.toLocaleString()}</dd>
           </div>
         </dl>
       </div>

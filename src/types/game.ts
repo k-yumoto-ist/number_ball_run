@@ -184,13 +184,21 @@ export type EndlessSnapshot = {
   seed: number
   generatedChunks: number
   upgrades: UpgradeLevels
+  hearts?: number
+  stars?: number
+  merges?: number
+  highestNumber?: BallNumber
+  activeItems?: string[]
 }
 
 export type EndlessBestRecords = {
   version: number
   bestScore: number
   longestDistance: number
+  bestStars: number
+  totalStars: number
   highestRank: number
+  highestNumber: BallNumber
   maxEvolutions: number
   maxCombo: number
   playCount: number

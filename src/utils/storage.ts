@@ -63,7 +63,10 @@ const DEFAULT_ENDLESS_RECORDS: EndlessBestRecords = {
   version: ENDLESS_STORAGE_VERSION,
   bestScore: 0,
   longestDistance: 0,
+  bestStars: 0,
+  totalStars: 0,
   highestRank: 1,
+  highestNumber: 2,
   maxEvolutions: 0,
   maxCombo: 0,
   playCount: 0,
@@ -94,7 +97,8 @@ export function saveEndlessHelpSeen(): EndlessBestRecords {
 }
 
 export function incrementEndlessPlayCount(): EndlessBestRecords {
-  const next = { ...loadEndlessRecords(), playCount: loadEndlessRecords().playCount + 1 }
+  const current = loadEndlessRecords()
+  const next = { ...current, playCount: current.playCount + 1 }
   writeString(STORAGE_KEYS.endlessRecords, JSON.stringify(next))
   return next
 }
@@ -106,7 +110,10 @@ export function saveEndlessResult(snapshot: EndlessSnapshot): { records: Endless
     ...current,
     bestScore: Math.max(current.bestScore, snapshot.score),
     longestDistance: Math.max(current.longestDistance, snapshot.distance),
+    bestStars: Math.max(current.bestStars, snapshot.stars ?? 0),
+    totalStars: current.totalStars + (snapshot.stars ?? 0),
     highestRank: Math.max(current.highestRank, snapshot.evolutionRank),
+    highestNumber: Math.max(current.highestNumber, snapshot.highestNumber ?? snapshot.value) as BallNumber,
     maxEvolutions: Math.max(current.maxEvolutions, snapshot.evolutionCount),
     maxCombo: Math.max(current.maxCombo, snapshot.maxCombo),
   }
