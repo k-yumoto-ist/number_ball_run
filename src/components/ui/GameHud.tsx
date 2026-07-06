@@ -1,6 +1,6 @@
 import { Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react'
 import { UI_TEXT } from '../../config/uiText'
-import type { BallNumber, GamePhase, PlayerSnapshot, StoredSettings } from '../../types/game'
+import type { GamePhase, PlayerSnapshot, StoredSettings } from '../../types/game'
 
 type GameHudProps = {
   phase: GamePhase
@@ -22,15 +22,13 @@ function formatTime(value: number) {
 
 function ResultOverlay({
   title,
-  value,
-  time,
+  snapshot,
   hasNextStage,
   onRetry,
   onNextStage,
 }: {
   title: string
-  value: BallNumber
-  time?: number
+  snapshot: PlayerSnapshot
   hasNextStage?: boolean
   onRetry: () => void
   onNextStage?: () => void
@@ -39,13 +37,20 @@ function ResultOverlay({
     <div className="overlay panel">
       <h1>{title}</h1>
       <p>
-        {UI_TEXT.reachedNumber} {value}
+        {UI_TEXT.reachedNumber} {snapshot.value}
       </p>
-      {time !== undefined ? (
-        <p>
-          {UI_TEXT.clearTime} {formatTime(time)}
-        </p>
-      ) : null}
+      <p>
+        {UI_TEXT.maxCombo} {snapshot.maxCombo}
+      </p>
+      <p>
+        {UI_TEXT.destroyedWalls} {snapshot.wallsDestroyed + snapshot.bonusWallsDestroyed}
+      </p>
+      <p>
+        {UI_TEXT.clearTime} {formatTime(snapshot.elapsedTime)}
+      </p>
+      <p>
+        {UI_TEXT.score} {Math.round(snapshot.score)}
+      </p>
       <button className="primary-button" type="button" onClick={onRetry}>
         <RotateCcw size={22} aria-hidden="true" />
         {UI_TEXT.retry}
@@ -75,10 +80,11 @@ export function GameHud({
 }: GameHudProps) {
   const showHelp = phase === 'ready' && !settings.hasSeenHelp
   const showReady = phase === 'ready' && settings.hasSeenHelp
+  const comboVisible = snapshot.combo >= 2 && phase === 'playing'
 
   return (
     <div className="ui-layer">
-      <header className="hud">
+      <header className={`hud ${snapshot.combo >= 3 ? 'hud-combo' : ''}`}>
         <div className="hud-pill stage-pill">
           {UI_TEXT.stage} {stageId}
         </div>
@@ -90,6 +96,14 @@ export function GameHud({
           {phase === 'paused' ? <Play size={22} aria-hidden="true" /> : <Pause size={22} aria-hidden="true" />}
         </button>
       </header>
+
+      {comboVisible ? (
+        <div key={snapshot.combo} className="combo-pop">
+          {snapshot.combo} {UI_TEXT.combo}
+        </div>
+      ) : null}
+
+      {snapshot.isBonus && phase === 'playing' ? <div className="bonus-label">{UI_TEXT.bonus}</div> : null}
 
       {showHelp ? (
         <div className="hint">
@@ -113,6 +127,9 @@ export function GameHud({
           <p>
             {UI_TEXT.bestTime} {settings.bestClearTime ? formatTime(settings.bestClearTime) : '--'}
           </p>
+          <p>
+            {UI_TEXT.score} {Math.round(snapshot.score)}
+          </p>
           <button className="primary-button" type="button" onClick={onResume}>
             <Play size={22} aria-hidden="true" />
             {UI_TEXT.resume}
@@ -128,12 +145,11 @@ export function GameHud({
         </div>
       ) : null}
 
-      {phase === 'gameOver' ? <ResultOverlay title={UI_TEXT.gameOver} value={snapshot.value} onRetry={onRetry} /> : null}
+      {phase === 'gameOver' ? <ResultOverlay title={UI_TEXT.gameOver} snapshot={snapshot} onRetry={onRetry} /> : null}
       {phase === 'cleared' ? (
         <ResultOverlay
           title={hasNextStage ? UI_TEXT.stageClear : UI_TEXT.finalStageClear}
-          value={snapshot.value}
-          time={snapshot.elapsedTime}
+          snapshot={snapshot}
           hasNextStage={hasNextStage}
           onRetry={onRetry}
           onNextStage={onNextStage}

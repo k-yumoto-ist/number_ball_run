@@ -1,7 +1,11 @@
 import { Billboard, Text } from '@react-three/drei'
+import { useFrame } from '@react-three/fiber'
+import { useRef } from 'react'
+import type { Group } from 'three'
 import { GAME_CONFIG } from '../../config/gameConfig'
 import { NUMBER_STYLES } from '../../config/numberConfig'
-import type { StageBall, StageGap, StageObstacle } from '../../types/game'
+import type { MovingObstacle, NumberWall, SpeedBoost, StageBall, StageGap, StageObstacle } from '../../types/game'
+import { getMovingObstacleX } from '../../utils/movingObstacle'
 
 type NumberBallProps = {
   ball: StageBall
@@ -52,6 +56,70 @@ export function Obstacle({ obstacle }: { obstacle: StageObstacle }) {
       <mesh position={[0, obstacle.height / 2 + 0.04, 0]}>
         <boxGeometry args={[obstacle.width * 0.72, 0.08, obstacle.depth * 0.72]} />
         <meshStandardMaterial color="#ff7a59" emissive="#5a1609" emissiveIntensity={0.12} />
+      </mesh>
+    </group>
+  )
+}
+
+export function MovingObstacleBlock({ obstacle }: { obstacle: MovingObstacle }) {
+  const groupRef = useRef<Group>(null)
+
+  useFrame(({ clock }) => {
+    if (groupRef.current) {
+      groupRef.current.position.x = getMovingObstacleX(obstacle, clock.elapsedTime)
+    }
+  })
+
+  return (
+    <group ref={groupRef} position={[obstacle.x, 0, obstacle.z]}>
+      <Obstacle obstacle={{ ...obstacle, x: 0, z: 0 }} />
+    </group>
+  )
+}
+
+export function NumberWall({ wall, hidden }: { wall: NumberWall; hidden: boolean }) {
+  if (hidden) {
+    return null
+  }
+  const style = NUMBER_STYLES[wall.value]
+  return (
+    <group position={[wall.x, wall.height / 2, wall.z]}>
+      <mesh>
+        <boxGeometry args={[wall.width, wall.height, 0.36]} />
+        <meshStandardMaterial color="#2c3f66" emissive={style.emissive} emissiveIntensity={0.22} roughness={0.5} />
+      </mesh>
+      <Billboard follow position={[0, 0.12, -0.24]} renderOrder={18}>
+        <Text
+          color="#ffffff"
+          fontSize={wall.value >= 1024 ? 0.5 : 0.68}
+          fontWeight={900}
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.035}
+          outlineColor="#172033"
+          depthOffset={-8}
+          material-depthTest={false}
+        >
+          {wall.value}
+        </Text>
+      </Billboard>
+    </group>
+  )
+}
+
+export function SpeedBoostPad({ boost, hidden }: { boost: SpeedBoost; hidden: boolean }) {
+  if (hidden) {
+    return null
+  }
+  return (
+    <group position={[boost.x, GAME_CONFIG.courseSurfaceY + 0.025, boost.z]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[boost.radius * 0.45, boost.radius, 32]} />
+        <meshBasicMaterial color="#2de2ff" transparent opacity={0.72} />
+      </mesh>
+      <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[boost.radius * 0.42, 24]} />
+        <meshBasicMaterial color="#fff36d" transparent opacity={0.72} />
       </mesh>
     </group>
   )

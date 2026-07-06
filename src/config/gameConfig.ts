@@ -16,9 +16,9 @@ export const GAME_CONFIG = {
   camera: {
     portraitFov: 56,
     landscapeFov: 48,
-    height: 7.1,
-    distance: 9.2,
-    lookAhead: 6.2,
+    height: 6.5,
+    distance: 8.2,
+    lookAhead: 7.8,
     lateralInfluence: 0.18,
     followLerp: 0.085,
   },

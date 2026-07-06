@@ -1,5 +1,5 @@
 import type { StageData, TrackSegment } from '../../types/game'
-import { Gap, Obstacle, NumberBall } from './StageObjects'
+import { Gap, MovingObstacleBlock, NumberBall, NumberWall, Obstacle, SpeedBoostPad } from './StageObjects'
 
 function TrackPiece({ segment }: { segment: TrackSegment }) {
   const dz = segment.zEnd - segment.zStart
@@ -23,7 +23,19 @@ function TrackPiece({ segment }: { segment: TrackSegment }) {
   )
 }
 
-export function Course({ stage, collectedIds }: { stage: StageData; collectedIds: Set<string> }) {
+export function Course({
+  stage,
+  collectedIds,
+  hiddenObstacleIds,
+  hiddenWallIds,
+  hiddenBoostIds,
+}: {
+  stage: StageData
+  collectedIds: Set<string>
+  hiddenObstacleIds: Set<string>
+  hiddenWallIds: Set<string>
+  hiddenBoostIds: Set<string>
+}) {
   return (
     <>
       <mesh position={[0, -0.08, stage.length / 2]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -40,7 +52,19 @@ export function Course({ stage, collectedIds }: { stage: StageData; collectedIds
         <NumberBall key={ball.id} ball={ball} hidden={collectedIds.has(ball.id)} />
       ))}
       {stage.obstacles.map((obstacle) => (
-        <Obstacle key={obstacle.id} obstacle={obstacle} />
+        hiddenObstacleIds.has(obstacle.id) ? null : <Obstacle key={obstacle.id} obstacle={obstacle} />
+      ))}
+      {stage.movingObstacles.map((obstacle) => (
+        hiddenObstacleIds.has(obstacle.id) ? null : <MovingObstacleBlock key={obstacle.id} obstacle={obstacle} />
+      ))}
+      {stage.walls.map((wall) => (
+        <NumberWall key={wall.id} wall={wall} hidden={hiddenWallIds.has(wall.id)} />
+      ))}
+      {stage.bonusWalls.map((wall) => (
+        <NumberWall key={wall.id} wall={wall} hidden={hiddenWallIds.has(wall.id)} />
+      ))}
+      {stage.speedBoosts.map((boost) => (
+        <SpeedBoostPad key={boost.id} boost={boost} hidden={hiddenBoostIds.has(boost.id)} />
       ))}
     </>
   )

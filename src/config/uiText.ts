@@ -19,4 +19,9 @@ export const UI_TEXT = {
   pause: '一時停止',
   nextStage: '次のステージ',
   finalStageClear: '全ステージクリア',
+  combo: 'コンボ',
+  maxCombo: '最大コンボ',
+  destroyedWalls: '破壊した壁',
+  score: 'スコア',
+  bonus: 'ボーナス',
 } as const

@@ -40,9 +40,35 @@ export const STAGES: StageData[] = [
       { id: 's1-o-6', x: 2, z: 134, width: 1, depth: 1.3, height: 1.3 },
       { id: 's1-o-7', x: -1.4, z: 151, width: 1, depth: 1.3, height: 1.3 },
     ],
+    movingObstacles: [
+      { id: 's1-m-1', x: -0.6, z: 88, width: 0.95, depth: 1.15, height: 1.25, moveAxis: 'x', moveDistance: 1.6, moveSpeed: 1.2, phase: 0 },
+      { id: 's1-m-2', x: 0.9, z: 132, width: 0.9, depth: 1.15, height: 1.2, moveAxis: 'x', moveDistance: 1.4, moveSpeed: 1.45, phase: 1.4 },
+    ],
     gaps: [
       { id: 's1-g-1', x: -2.05, z: 55, width: 1.45, depth: 3.8 },
       { id: 's1-g-2', x: 2.2, z: 118, width: 1.45, depth: 4 },
+    ],
+    walls: [
+      { id: 's1-w-8', value: 8, x: -1.55, z: 52, width: 1.45, height: 2.15 },
+      { id: 's1-w-32', value: 32, x: 1.15, z: 102, width: 1.55, height: 2.35 },
+      { id: 's1-w-64', value: 64, x: -0.55, z: 136, width: 1.65, height: 2.45 },
+    ],
+    speedBoosts: [
+      { id: 's1-boost-1', x: 2.15, z: 72, radius: 0.75, multiplier: 1.25, duration: 2.2 },
+      { id: 's1-boost-2', x: -1.4, z: 154, radius: 0.75, multiplier: 1.2, duration: 2 },
+    ],
+    bonusWalls: [
+      { id: 's1-bonus-2', value: 2, x: 0, z: 174, width: 2.6, height: 2.2 },
+      { id: 's1-bonus-4', value: 4, x: 0, z: 180, width: 2.6, height: 2.2 },
+      { id: 's1-bonus-8', value: 8, x: 0, z: 186, width: 2.6, height: 2.2 },
+      { id: 's1-bonus-16', value: 16, x: 0, z: 192, width: 2.6, height: 2.2 },
+      { id: 's1-bonus-32', value: 32, x: 0, z: 198, width: 2.6, height: 2.2 },
+      { id: 's1-bonus-64', value: 64, x: 0, z: 204, width: 2.6, height: 2.2 },
+      { id: 's1-bonus-128', value: 128, x: 0, z: 210, width: 2.6, height: 2.2 },
+      { id: 's1-bonus-256', value: 256, x: 0, z: 216, width: 2.6, height: 2.2 },
+      { id: 's1-bonus-512', value: 512, x: 0, z: 222, width: 2.6, height: 2.2 },
+      { id: 's1-bonus-1024', value: 1024, x: 0, z: 228, width: 2.6, height: 2.2 },
+      { id: 's1-bonus-2048', value: 2048, x: 0, z: 234, width: 2.6, height: 2.2 },
     ],
   },
   {
@@ -80,9 +106,35 @@ export const STAGES: StageData[] = [
       { id: 's2-o-5', x: -1.4, z: 142, width: 1, depth: 1.2, height: 1.3 },
       { id: 's2-o-6', x: 1.3, z: 162, width: 1, depth: 1.2, height: 1.3 },
     ],
+    movingObstacles: [
+      { id: 's2-m-1', x: -0.8, z: 82, width: 0.95, depth: 1.15, height: 1.25, moveAxis: 'x', moveDistance: 1.5, moveSpeed: 1.25, phase: 0.5 },
+      { id: 's2-m-2', x: 0.4, z: 146, width: 1, depth: 1.2, height: 1.3, moveAxis: 'x', moveDistance: 1.7, moveSpeed: 1.1, phase: 2.2 },
+    ],
     gaps: [
       { id: 's2-g-1', x: 0.9, z: 72, width: 1.4, depth: 4 },
       { id: 's2-g-2', x: -2.1, z: 122, width: 1.35, depth: 4.2 },
+    ],
+    walls: [
+      { id: 's2-w-16', value: 16, x: -1.45, z: 70, width: 1.5, height: 2.3 },
+      { id: 's2-w-64', value: 64, x: 1.15, z: 116, width: 1.6, height: 2.45 },
+      { id: 's2-w-128', value: 128, x: -0.65, z: 150, width: 1.7, height: 2.5 },
+    ],
+    speedBoosts: [
+      { id: 's2-boost-1', x: 1.8, z: 58, radius: 0.75, multiplier: 1.25, duration: 2.2 },
+      { id: 's2-boost-2', x: -1.8, z: 136, radius: 0.75, multiplier: 1.2, duration: 2 },
+    ],
+    bonusWalls: [
+      { id: 's2-bonus-2', value: 2, x: 0, z: 188, width: 2.6, height: 2.2 },
+      { id: 's2-bonus-4', value: 4, x: 0, z: 194, width: 2.6, height: 2.2 },
+      { id: 's2-bonus-8', value: 8, x: 0, z: 200, width: 2.6, height: 2.2 },
+      { id: 's2-bonus-16', value: 16, x: 0, z: 206, width: 2.6, height: 2.2 },
+      { id: 's2-bonus-32', value: 32, x: 0, z: 212, width: 2.6, height: 2.2 },
+      { id: 's2-bonus-64', value: 64, x: 0, z: 218, width: 2.6, height: 2.2 },
+      { id: 's2-bonus-128', value: 128, x: 0, z: 224, width: 2.6, height: 2.2 },
+      { id: 's2-bonus-256', value: 256, x: 0, z: 230, width: 2.6, height: 2.2 },
+      { id: 's2-bonus-512', value: 512, x: 0, z: 236, width: 2.6, height: 2.2 },
+      { id: 's2-bonus-1024', value: 1024, x: 0, z: 242, width: 2.6, height: 2.2 },
+      { id: 's2-bonus-2048', value: 2048, x: 0, z: 248, width: 2.6, height: 2.2 },
     ],
   },
   {
@@ -121,10 +173,36 @@ export const STAGES: StageData[] = [
       { id: 's3-o-6', x: 0.8, z: 162, width: 1, depth: 1.2, height: 1.35 },
       { id: 's3-o-7', x: -2, z: 182, width: 1, depth: 1.2, height: 1.35 },
     ],
+    movingObstacles: [
+      { id: 's3-m-1', x: 0.3, z: 96, width: 0.95, depth: 1.15, height: 1.3, moveAxis: 'x', moveDistance: 1.8, moveSpeed: 1.35, phase: 0.8 },
+      { id: 's3-m-2', x: -0.6, z: 150, width: 1, depth: 1.2, height: 1.35, moveAxis: 'x', moveDistance: 1.4, moveSpeed: 1.2, phase: 2.8 },
+    ],
     gaps: [
       { id: 's3-g-1', x: 1.8, z: 58, width: 1.35, depth: 4 },
       { id: 's3-g-2', x: -2, z: 121, width: 1.35, depth: 4.4 },
       { id: 's3-g-3', x: 1.5, z: 166, width: 1.3, depth: 4 },
+    ],
+    walls: [
+      { id: 's3-w-32', value: 32, x: -1.25, z: 90, width: 1.55, height: 2.35 },
+      { id: 's3-w-128', value: 128, x: 0.9, z: 138, width: 1.7, height: 2.5 },
+      { id: 's3-w-256', value: 256, x: -1.2, z: 176, width: 1.8, height: 2.65 },
+    ],
+    speedBoosts: [
+      { id: 's3-boost-1', x: -2.1, z: 78, radius: 0.75, multiplier: 1.25, duration: 2.2 },
+      { id: 's3-boost-2', x: 0.9, z: 158, radius: 0.75, multiplier: 1.25, duration: 2.2 },
+    ],
+    bonusWalls: [
+      { id: 's3-bonus-2', value: 2, x: 0, z: 204, width: 2.6, height: 2.2 },
+      { id: 's3-bonus-4', value: 4, x: 0, z: 210, width: 2.6, height: 2.2 },
+      { id: 's3-bonus-8', value: 8, x: 0, z: 216, width: 2.6, height: 2.2 },
+      { id: 's3-bonus-16', value: 16, x: 0, z: 222, width: 2.6, height: 2.2 },
+      { id: 's3-bonus-32', value: 32, x: 0, z: 228, width: 2.6, height: 2.2 },
+      { id: 's3-bonus-64', value: 64, x: 0, z: 234, width: 2.6, height: 2.2 },
+      { id: 's3-bonus-128', value: 128, x: 0, z: 240, width: 2.6, height: 2.2 },
+      { id: 's3-bonus-256', value: 256, x: 0, z: 246, width: 2.6, height: 2.2 },
+      { id: 's3-bonus-512', value: 512, x: 0, z: 252, width: 2.6, height: 2.2 },
+      { id: 's3-bonus-1024', value: 1024, x: 0, z: 258, width: 2.6, height: 2.2 },
+      { id: 's3-bonus-2048', value: 2048, x: 0, z: 264, width: 2.6, height: 2.2 },
     ],
   },
 ]

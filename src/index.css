@@ -111,6 +111,7 @@ button {
   overflow: hidden;
   border-radius: 999px;
   min-width: 0;
+  background: rgba(33, 48, 76, 0.16);
 }
 
 .progress-fill {
@@ -120,6 +121,51 @@ button {
   border-radius: 999px;
   background: linear-gradient(90deg, #32c7ff, #50df87, #ffd84d);
   transition: width 120ms linear;
+}
+
+.hud-combo .progress-fill {
+  background: linear-gradient(90deg, #ffd84d, #ff7a59, #d577ff);
+  box-shadow: 0 0 16px rgba(255, 216, 77, 0.55);
+}
+
+.combo-pop,
+.bonus-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  color: #172033;
+  font-weight: 950;
+  pointer-events: none;
+  box-shadow: 0 10px 26px rgba(30, 64, 105, 0.18);
+}
+
+.combo-pop {
+  top: calc(env(safe-area-inset-top) + 62px);
+  font-size: 20px;
+  animation: combo-pop 220ms ease-out;
+}
+
+.bonus-label {
+  top: calc(env(safe-area-inset-top) + 106px);
+  font-size: 14px;
+  color: #3a2500;
+  background: rgba(255, 216, 77, 0.88);
+}
+
+@keyframes combo-pop {
+  from {
+    transform: translateX(-50%) scale(0.82);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
 }
 
 .icon-button,

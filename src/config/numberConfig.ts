@@ -28,3 +28,8 @@ export function nextNumber(value: BallNumber): BallNumber {
   const index = NUMBER_ORDER.indexOf(value)
   return NUMBER_ORDER[Math.min(index + 1, NUMBER_ORDER.length - 1)]
 }
+
+export function previousNumber(value: BallNumber): BallNumber {
+  const index = NUMBER_ORDER.indexOf(value)
+  return NUMBER_ORDER[Math.max(index - 1, 0)]
+}

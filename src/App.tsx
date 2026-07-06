@@ -16,6 +16,12 @@ const INITIAL_SNAPSHOT: PlayerSnapshot = {
   value: 2,
   progress: 0,
   elapsedTime: 0,
+  combo: 0,
+  maxCombo: 0,
+  score: 0,
+  wallsDestroyed: 0,
+  bonusWallsDestroyed: 0,
+  isBonus: false,
 }
 
 function App() {
