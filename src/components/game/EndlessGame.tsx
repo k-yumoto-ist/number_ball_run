@@ -3,6 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Group } from 'three'
 import { GAME_CONFIG } from '../../config/gameConfig'
+import { DEBUG_DIFFICULTY, getDifficultySettings, type DifficultySettings } from '../../config/kidsDifficultyConfig'
 import { KIDS_ENDLESS_CONFIG, LANE_X } from '../../config/kidsEndlessConfig'
 import { NUMBER_STYLES, nextNumber, NUMBER_ORDER } from '../../config/numberConfig'
 import type { InputControls } from '../../hooks/useInputControls'
@@ -37,6 +38,7 @@ type RowPattern = {
   minimumDifficulty: number
   maximumDifficulty?: number
   weight: number
+  difficultyScore?: number
   tags: string[]
   lanes: [LaneContent, LaneContent, LaneContent]
 }
@@ -77,6 +79,17 @@ type PlayerRuntime = {
   giantTimer: number
   lastMergeZ: number
   lastDamageZ: number
+}
+
+type DifficultyDebugInfo = {
+  distance: number
+  level: number
+  speedMultiplier: number
+  obstacleRate: number
+  movingObstacleRate: number
+  largeNumberBallRate: number
+  itemRate: number
+  hardRows: number
 }
 
 const LANES = [LANE_X.left, LANE_X.center, LANE_X.right] as const
@@ -137,14 +150,6 @@ type EndlessGameProps = {
   onHome: () => void
 }
 
-function getDifficulty(distance: number) {
-  if (distance < 300) return 1
-  if (distance < 700) return 2
-  if (distance < 1200) return 3
-  if (distance < 2000) return 4
-  return 5 + Math.floor((distance - 2000) / 700)
-}
-
 function getTheme(distance: number) {
   const cycleDistance = distance < 2000 ? distance : 500 + ((distance - 2000) % 1500)
   return [...THEMES].reverse().find((theme) => cycleDistance >= theme.start) ?? THEMES[0]
@@ -194,7 +199,7 @@ function makeSnapshot(player: PlayerRuntime, seed: number, rowCount: number): En
     shields: player.shield ? 1 : 0,
     evolutionRank: player.evolutionCount + 1,
     evolutionCount: player.evolutionCount,
-    difficultyLevel: getDifficulty(player.z),
+    difficultyLevel: getDifficultySettings(player.z).level,
     seed,
     generatedChunks: rowCount,
     upgrades: {},
@@ -214,6 +219,49 @@ function hasSafeLane(pattern: RowPattern) {
   return pattern.lanes.some(isSafe)
 }
 
+function countSafeLanes(lanes: [LaneContent, LaneContent, LaneContent]) {
+  return lanes.filter(isSafe).length
+}
+
+function isHardLanes(lanes: [LaneContent, LaneContent, LaneContent]) {
+  return countSafeLanes(lanes) <= 1 || lanes.some((lane) => lane.type === 'obstacle' && lane.obstacleType !== 'block') || lanes.some((lane) => lane.type === 'numberBall' && lane.valueMode === 'larger')
+}
+
+function chooseObstacleType(rng: SeededRandom, settings: DifficultySettings): ObstacleType {
+  if (settings.level <= 2 || rng.next() > settings.movingObstacleRate) {
+    return 'block'
+  }
+  if (settings.level >= 8 && rng.next() < 0.35) {
+    return 'rotatingBar'
+  }
+  if (settings.level >= 5 && rng.next() < 0.38) {
+    return 'gate'
+  }
+  return 'movingBlock'
+}
+
+function makeRestRow(index: number, z: number, settings: DifficultySettings, currentValue: BallNumber): GeneratedRow {
+  const lanes: [LaneContent, LaneContent, LaneContent] = [
+    { type: 'star', count: settings.level >= 8 ? 1 : 3 },
+    { type: 'numberBall', valueMode: currentValue === 2 ? 'same' : 'smaller' },
+    EMPTY,
+  ]
+  return { id: `rest-${index}`, patternId: 'rest-row', z, difficulty: settings.level, lanes }
+}
+
+function ensureSafety(lanes: [LaneContent, LaneContent, LaneContent], settings: DifficultySettings) {
+  if (countSafeLanes(lanes) >= settings.minimumSafeLanes) {
+    return lanes
+  }
+  const next = lanes.map((lane) => ({ ...lane })) as [LaneContent, LaneContent, LaneContent]
+  for (let index = 0; index < 3 && countSafeLanes(next) < settings.minimumSafeLanes; index += 1) {
+    if (!isSafe(next[index])) {
+      next[index] = EMPTY
+    }
+  }
+  return next
+}
+
 function chooseItem(rng: SeededRandom, hearts: number, lastItem: ItemType | null): ItemType {
   const items: ItemType[] = hearts <= 1 ? ['shield', 'magnet', 'slow', 'rainbow', 'giant'] : ['shield', 'magnet', 'slow', 'rainbow', 'giant']
   const picked = rng.pick(items.filter((item) => item !== lastItem))
@@ -225,26 +273,30 @@ function chooseEvent(rng: SeededRandom, player: PlayerRuntime, lastEvent: EventT
   return rng.pick(events.filter((event) => event !== lastEvent)) ?? 'starRush'
 }
 
-function buildEventRows(eventType: EventType, startZ: number, rng: SeededRandom): GeneratedRow[] {
+function buildEventRows(eventType: EventType, startZ: number, rng: SeededRandom, settings: DifficultySettings): GeneratedRow[] {
   const rows: GeneratedRow[] = []
   const push = (index: number, lanes: [LaneContent, LaneContent, LaneContent]) => {
-    rows.push({ id: `event-${eventType}-${startZ}-${index}`, patternId: eventType, z: startZ + index * KIDS_ENDLESS_CONFIG.rowSpacing, difficulty: 1, eventType, lanes })
+    rows.push({ id: `event-${eventType}-${startZ}-${index}`, patternId: eventType, z: startZ + index * settings.rowSpacing, difficulty: settings.level, eventType, lanes })
   }
   if (eventType === 'mergeRush') {
-    for (let i = 0; i < 5; i += 1) {
+    const count = settings.level >= 8 ? 6 : 5
+    for (let i = 0; i < count; i += 1) {
       const lane = rng.integer(0, 2) as LaneIndex
       const lanes: [LaneContent, LaneContent, LaneContent] = [EMPTY, EMPTY, EMPTY]
       lanes[lane] = { type: 'numberBall', valueMode: 'same' }
+      if (settings.level >= 8 && i % 3 === 1) {
+        lanes[(lane + 1) % 3 as LaneIndex] = { type: 'obstacle', obstacleType: 'block' }
+      }
       push(i, lanes)
     }
     return rows
   }
   if (eventType === 'starRush') {
     for (let i = 0; i < 6; i += 1) {
-      const lane = (i % 3) as LaneIndex
+      const lane = (settings.level >= 8 ? (i * 2) % 3 : i % 3) as LaneIndex
       const lanes: [LaneContent, LaneContent, LaneContent] = [EMPTY, EMPTY, EMPTY]
       lanes[lane] = { type: 'star', count: 3 }
-      if (i === 3) lanes[(lane + 1) % 3 as LaneIndex] = { type: 'obstacle', obstacleType: 'block' }
+      if (i === 3 || (settings.level >= 8 && i === 5)) lanes[(lane + 1) % 3 as LaneIndex] = { type: 'obstacle', obstacleType: settings.level >= 8 ? 'movingBlock' : 'block' }
       push(i, lanes)
     }
     return rows
@@ -253,7 +305,7 @@ function buildEventRows(eventType: EventType, startZ: number, rng: SeededRandom)
     push(0, [{ type: 'item', itemType: 'giant' }, EMPTY, { type: 'star', count: 1 }])
     for (let i = 1; i < 6; i += 1) {
       const safeLane = rng.integer(0, 2) as LaneIndex
-      const lanes: [LaneContent, LaneContent, LaneContent] = [{ type: 'obstacle', obstacleType: 'block' }, { type: 'obstacle', obstacleType: 'block' }, { type: 'obstacle', obstacleType: 'block' }]
+      const lanes: [LaneContent, LaneContent, LaneContent] = [{ type: 'obstacle', obstacleType: settings.level >= 8 ? 'movingBlock' : 'block' }, { type: 'obstacle', obstacleType: 'block' }, { type: 'obstacle', obstacleType: 'block' }]
       lanes[safeLane] = { type: 'star', count: 1 }
       push(i, lanes)
     }
@@ -320,11 +372,23 @@ function NumberObject({ value, x, z, hidden }: { value: BallNumber; x: number; z
   )
 }
 
-function ObstacleObject({ type, x, z, hidden, theme }: { type: ObstacleType; x: number; z: number; hidden: boolean; theme: (typeof THEMES)[number] }) {
+function ObstacleObject({ type, x, z, hidden, theme, speedMultiplier }: { type: ObstacleType; x: number; z: number; hidden: boolean; theme: (typeof THEMES)[number]; speedMultiplier: number }) {
+  const groupRef = useRef<Group>(null)
+  useFrame(({ clock }) => {
+    if (!groupRef.current) return
+    if (type === 'movingBlock') {
+      groupRef.current.position.x = x + Math.sin(clock.elapsedTime * 1.5 * speedMultiplier + z) * 0.42
+    } else if (type === 'gate') {
+      const open = 0.72 + Math.sin(clock.elapsedTime * 1.7 * speedMultiplier + z) * 0.22
+      groupRef.current.scale.x = open
+    } else if (type === 'rotatingBar') {
+      groupRef.current.rotation.y = clock.elapsedTime * 1.15 * speedMultiplier
+    }
+  })
   if (hidden) return null
   if (type === 'gate') {
     return (
-      <group position={[x, 0, z]}>
+      <group ref={groupRef} position={[x, 0, z]}>
         <mesh position={[-0.36, 0.8, 0]}>
           <boxGeometry args={[0.28, 1.6, 0.45]} />
           <meshStandardMaterial color={theme.obstacle} />
@@ -338,7 +402,7 @@ function ObstacleObject({ type, x, z, hidden, theme }: { type: ObstacleType; x: 
   }
   if (type === 'rotatingBar') {
     return (
-      <group position={[x, 0.65, z]} rotation={[0, 0, Math.PI / 9]}>
+      <group ref={groupRef} position={[x, 0.65, z]} rotation={[0, 0, Math.PI / 9]}>
         <mesh>
           <boxGeometry args={[1.65, 0.24, 0.42]} />
           <meshStandardMaterial color={theme.obstacle} />
@@ -347,10 +411,12 @@ function ObstacleObject({ type, x, z, hidden, theme }: { type: ObstacleType; x: 
     )
   }
   return (
-    <mesh position={[x, 0.65, z]}>
-      <boxGeometry args={[1.15, 1.3, 1.05]} />
-      <meshStandardMaterial color={theme.obstacle} roughness={0.55} />
-    </mesh>
+    <group ref={groupRef} position={[x, 0.65, z]}>
+      <mesh>
+        <boxGeometry args={[1.15, 1.3, 1.05]} />
+        <meshStandardMaterial color={theme.obstacle} roughness={0.55} />
+      </mesh>
+    </group>
   )
 }
 
@@ -388,7 +454,7 @@ function RowObjects({ rows, hiddenIds, playerValue, theme }: { rows: GeneratedRo
         if (content.type === 'item') return <ItemObject key={id} type={content.itemType} x={x} z={row.z} hidden={hiddenIds.has(id)} />
         if (content.type === 'heart') return <ItemObject key={id} type="heart" x={x} z={row.z} hidden={hiddenIds.has(id)} />
         if (content.type === 'numberBall') return <NumberObject key={id} value={resolveNumber(playerValue, content.valueMode)} x={x} z={row.z} hidden={hiddenIds.has(id)} />
-        if (content.type === 'obstacle') return <ObstacleObject key={id} type={content.obstacleType} x={x} z={row.z} hidden={hiddenIds.has(id)} theme={theme} />
+        if (content.type === 'obstacle') return <ObstacleObject key={id} type={content.obstacleType} x={x} z={row.z} hidden={hiddenIds.has(id)} theme={theme} speedMultiplier={getDifficultySettings(row.z).movingObstacleSpeedMultiplier} />
         return null
       }))}
     </>
@@ -402,6 +468,7 @@ function KidsLoop({
   soundEnabled,
   onSnapshot,
   onGameOver,
+  onDebugInfo,
 }: {
   phase: EndlessPhase
   controlsRef: React.RefObject<InputControls>
@@ -409,6 +476,7 @@ function KidsLoop({
   soundEnabled: boolean
   onSnapshot: (snapshot: EndlessSnapshot) => void
   onGameOver: (snapshot: EndlessSnapshot) => void
+  onDebugInfo: (info: DifficultyDebugInfo) => void
 }) {
   const rngRef = useRef(new SeededRandom(seed))
   const playerRef = useRef<PlayerRuntime>({
@@ -441,6 +509,10 @@ function KidsLoop({
   })
   const rowsRef = useRef<GeneratedRow[]>([])
   const rowIndexRef = useRef(0)
+  const nextRowZRef = useRef(18)
+  const hardRowsRef = useRef(0)
+  const lastDifficultyLevelRef = useRef(1)
+  const currentSpeedMultiplierRef = useRef(1)
   const lastPatternRef = useRef<string[]>([])
   const lastMergeRowRef = useRef(-99)
   const nextMergeGapRef = useRef(3)
@@ -577,26 +649,37 @@ function KidsLoop({
   const generateRow = () => {
     const player = playerRef.current
     const index = rowIndexRef.current
-    const z = index * KIDS_ENDLESS_CONFIG.rowSpacing + 18
-    const difficulty = getDifficulty(z)
+    const z = nextRowZRef.current
+    const settings = getDifficultySettings(z)
+    const difficulty = settings.level
     if (index === 0) {
       rowIndexRef.current += 1
+      nextRowZRef.current += settings.rowSpacing
       return { id: `row-${index}`, patternId: 'start-star', z, difficulty, lanes: [EMPTY, { type: 'star', count: 3 }, EMPTY] as [LaneContent, LaneContent, LaneContent] }
+    }
+
+    if (hardRowsRef.current >= settings.maximumHardRowsInSequence || rngRef.current.next() < settings.restRowRate * 0.22) {
+      rowIndexRef.current += 1
+      nextRowZRef.current += settings.rowSpacing
+      hardRowsRef.current = 0
+      return makeRestRow(index, z, settings, player.value)
     }
 
     if (index >= nextEventRowRef.current && z > KIDS_ENDLESS_CONFIG.eventMinimumDistance) {
       const eventType = chooseEvent(rngRef.current, player, lastEventRef.current)
-      const eventRows = buildEventRows(eventType, z, rngRef.current)
+      const eventRows = buildEventRows(eventType, z, rngRef.current, settings)
       lastEventRef.current = eventType
       nextEventRowRef.current = index + rngRef.current.integer(KIDS_ENDLESS_CONFIG.eventMinimumGapRows, KIDS_ENDLESS_CONFIG.eventMaximumGapRows)
       rowIndexRef.current += eventRows.length
+      nextRowZRef.current += eventRows.length * settings.rowSpacing
+      hardRowsRef.current = Math.min(hardRowsRef.current + 1, settings.maximumHardRowsInSequence)
       setEventMessage(eventType === 'mergeRush' ? '合体ラッシュ' : eventType === 'starRush' ? 'スターラッシュ' : eventType === 'giantRush' ? '巨大化ラッシュ' : 'ハートチャンス')
       eventMessageTimerRef.current = 1.2
       return eventRows
     }
 
     const recent = new Set(lastPatternRef.current.slice(-4))
-    const shouldMerge = index - lastMergeRowRef.current >= nextMergeGapRef.current && index - Math.floor(player.lastMergeZ / KIDS_ENDLESS_CONFIG.rowSpacing) > KIDS_ENDLESS_CONFIG.mergeCooldownRows
+    const shouldMerge = index - lastMergeRowRef.current >= nextMergeGapRef.current && (z - player.lastMergeZ) / settings.rowSpacing > KIDS_ENDLESS_CONFIG.mergeCooldownRows
     const candidates = ROW_PATTERNS.filter((pattern) => {
       if (pattern.minimumDifficulty > difficulty) return false
       if (pattern.maximumDifficulty && pattern.maximumDifficulty < difficulty) return false
@@ -606,18 +689,36 @@ function KidsLoop({
       if (hasMerge && !shouldMerge) return false
       if (!hasMerge && shouldMerge && pattern.tags.includes('merge')) return true
       const hasItem = pattern.lanes.some((lane) => lane.type === 'item')
-      if (hasItem && index - lastItemRowRef.current < KIDS_ENDLESS_CONFIG.itemMinimumGapRows) return false
+      if (hasItem && (index - lastItemRowRef.current < KIDS_ENDLESS_CONFIG.itemMinimumGapRows || rngRef.current.next() > settings.itemRate)) return false
+      if (pattern.tags.includes('heart') && rngRef.current.next() > (player.hearts <= 1 ? settings.heartRate * 2.2 : settings.heartRate)) return false
       return true
     })
     const fallback = shouldMerge ? ROW_PATTERNS.find((pattern) => pattern.id === 'center-merge-choice')! : ROW_PATTERNS[0]
     const pattern = candidates.length > 0 ? rngRef.current.weightedPick(candidates, (item) => {
       let weight = item.weight
-      if (player.hearts <= 1 && item.tags.includes('heart')) weight *= 4
+      if (item.tags.includes('obstacle') || item.tags.includes('moving') || item.tags.includes('gate') || item.tags.includes('rotating')) weight *= 1 + settings.obstacleRate + settings.hardPatternBias
+      if (item.tags.includes('danger')) weight *= 1 + settings.largeNumberBallRate * 3
+      if (item.tags.includes('item')) weight *= settings.itemRate * 2.5
+      if (item.tags.includes('heart')) weight *= (player.hearts <= 1 ? settings.heartRate * 8 : settings.heartRate * 3)
       if (player.value === 2 && item.tags.includes('merge')) weight *= 1.6
       return weight
     }) : fallback
     let lanes = pattern.lanes.map((lane) => ({ ...lane })) as [LaneContent, LaneContent, LaneContent]
     lanes = lanes.map((lane) => lane.type === 'item' ? { type: 'item', itemType: chooseItem(rngRef.current, player.hearts, lastItemRef.current) } : lane) as [LaneContent, LaneContent, LaneContent]
+    lanes = lanes.map((lane) => lane.type === 'obstacle' ? { type: 'obstacle', obstacleType: chooseObstacleType(rngRef.current, settings) } : lane) as [LaneContent, LaneContent, LaneContent]
+    if (rngRef.current.next() < settings.largeNumberBallRate && !lanes.some((lane) => lane.type === 'numberBall' && lane.valueMode === 'larger')) {
+      const replaceable = lanes.findIndex((lane) => lane.type === 'empty' || lane.type === 'star')
+      if (replaceable >= 0 && countSafeLanes(lanes) > settings.minimumSafeLanes) {
+        lanes[replaceable as LaneIndex] = { type: 'numberBall', valueMode: 'larger' }
+      }
+    }
+    if (rngRef.current.next() < settings.obstacleRate && countSafeLanes(lanes) > settings.minimumSafeLanes) {
+      const replaceable = lanes.findIndex((lane) => lane.type === 'empty' || lane.type === 'star')
+      if (replaceable >= 0) {
+        lanes[replaceable as LaneIndex] = { type: 'obstacle', obstacleType: chooseObstacleType(rngRef.current, settings) }
+      }
+    }
+    lanes = ensureSafety(lanes, settings)
     if (lanes.some((lane) => lane.type === 'numberBall' && lane.valueMode === 'same')) {
       lastMergeRowRef.current = index
       nextMergeGapRef.current = rngRef.current.integer(KIDS_ENDLESS_CONFIG.minimumMergeRowGap, KIDS_ENDLESS_CONFIG.maximumMergeRowGap)
@@ -629,18 +730,21 @@ function KidsLoop({
     }
     lastPatternRef.current.push(pattern.id)
     rowIndexRef.current += 1
+    nextRowZRef.current += settings.rowSpacing
+    hardRowsRef.current = isHardLanes(lanes) ? hardRowsRef.current + 1 : 0
     return { id: `row-${index}`, patternId: pattern.id, z, difficulty, lanes }
   }
 
   const ensureRows = () => {
     const playerZ = playerRef.current.z
+    const settings = getDifficultySettings(playerZ)
     let changed = false
-    while (rowsRef.current.length === 0 || (rowsRef.current.at(-1)?.z ?? 0) < playerZ + KIDS_ENDLESS_CONFIG.rowsAhead * KIDS_ENDLESS_CONFIG.rowSpacing) {
+    while (rowsRef.current.length === 0 || (rowsRef.current.at(-1)?.z ?? 0) < playerZ + KIDS_ENDLESS_CONFIG.rowsAhead * settings.rowSpacing) {
       const next = generateRow()
       rowsRef.current.push(...(Array.isArray(next) ? next : [next]))
       changed = true
     }
-    const keepFrom = playerZ - KIDS_ENDLESS_CONFIG.rowsBehind * KIDS_ENDLESS_CONFIG.rowSpacing - KIDS_ENDLESS_CONFIG.pruneBehindDistance
+    const keepFrom = playerZ - KIDS_ENDLESS_CONFIG.rowsBehind * settings.rowSpacing - KIDS_ENDLESS_CONFIG.pruneBehindDistance
     const before = rowsRef.current.length
     rowsRef.current = rowsRef.current.filter((row) => row.z > keepFrom)
     if (before !== rowsRef.current.length) {
@@ -670,7 +774,7 @@ function KidsLoop({
     switchCooldownRef.current = Math.max(0, switchCooldownRef.current - delta)
     themeMessageTimerRef.current = Math.max(0, themeMessageTimerRef.current - delta)
     eventMessageTimerRef.current = Math.max(0, eventMessageTimerRef.current - delta)
-    if (themeMessageTimerRef.current === 0 && themeMessage) setThemeMessage('進化！')
+    if (themeMessageTimerRef.current === 0 && themeMessage) setThemeMessage('')
     if (eventMessageTimerRef.current === 0 && eventMessage) setEventMessage('')
     shakeRef.current = player.shake
 
@@ -700,8 +804,14 @@ function KidsLoop({
     }
     player.x += (LANES[player.lane] - player.x) * Math.min(delta * KIDS_ENDLESS_CONFIG.laneFollow, 1)
 
-    const difficulty = getDifficulty(player.z)
-    const speedMultiplier = Math.min(1 + (difficulty - 1) * 0.11, KIDS_ENDLESS_CONFIG.maximumSpeedMultiplier)
+    const settings = getDifficultySettings(player.z)
+    if (settings.level > lastDifficultyLevelRef.current) {
+      lastDifficultyLevelRef.current = settings.level
+      setThemeMessage(`レベル ${settings.level} スピードアップ！`)
+      themeMessageTimerRef.current = 1.05
+    }
+    const speedMultiplier = Math.min(settings.speedMultiplier, KIDS_ENDLESS_CONFIG.maximumSpeedMultiplier)
+    currentSpeedMultiplierRef.current = speedMultiplier
     const targetSpeed = KIDS_ENDLESS_CONFIG.initialSpeed * speedMultiplier * (player.slowTimer > 0 ? KIDS_ENDLESS_CONFIG.damageSpeedMultiplier : 1) * (player.slowItemTimer > 0 ? 0.72 : 1)
     player.currentSpeed += (targetSpeed - player.currentSpeed) * Math.min(delta * 3.2, 1)
     speedRef.current = player.currentSpeed
@@ -724,7 +834,10 @@ function KidsLoop({
         const content = row.lanes[laneIndex]
         const id = `${row.id}-${laneIndex}`
         if (hiddenRef.current.has(id) || hitRef.current.has(id)) continue
-        const x = LANES[laneIndex]
+        let x = LANES[laneIndex]
+        if (content.type === 'obstacle' && content.obstacleType === 'movingBlock') {
+          x += Math.sin(player.elapsedTime * 1.5 * getDifficultySettings(row.z).movingObstacleSpeedMultiplier + row.z) * 0.42
+        }
         const baseHit = { x, z: row.z, radius: content.type === 'star' ? (player.magnetTimer > 0 ? 2.3 : 0.55) : 0.78 }
         if (!circleHit({ x: player.x, z: player.z, radius: player.radius * (player.giantTimer > 0 ? 1.2 : 0.86) }, baseHit)) continue
         if (content.type === 'star') {
@@ -779,6 +892,19 @@ function KidsLoop({
     if (lastHudRef.current > KIDS_ENDLESS_CONFIG.hudUpdateSeconds) {
       lastHudRef.current = 0
       onSnapshot(makeSnapshot(player, seed, rowIndexRef.current))
+      if (DEBUG_DIFFICULTY.enabled) {
+        const debugSettings = getDifficultySettings(player.z)
+        onDebugInfo({
+          distance: player.z,
+          level: debugSettings.level,
+          speedMultiplier: currentSpeedMultiplierRef.current,
+          obstacleRate: debugSettings.obstacleRate,
+          movingObstacleRate: debugSettings.movingObstacleRate,
+          largeNumberBallRate: debugSettings.largeNumberBallRate,
+          itemRate: debugSettings.itemRate,
+          hardRows: hardRowsRef.current,
+        })
+      }
     }
   })
 
@@ -823,6 +949,7 @@ export function EndlessGame({ records, soundEnabled, onRecordsChange, onHome }: 
   const [runId, setRunId] = useState(0)
   const [snapshot, setSnapshot] = useState<EndlessSnapshot>({ ...INITIAL_SNAPSHOT, seed })
   const [isNewBest, setIsNewBest] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<DifficultyDebugInfo | null>(null)
 
   const markStart = useCallback(() => {
     if (!records.hasSeenEndlessHelp) onRecordsChange(saveEndlessHelpSeen())
@@ -864,9 +991,21 @@ export function EndlessGame({ records, soundEnabled, onRecordsChange, onHome }: 
         }}
         camera={{ position: [0, 6.4, -8.2], fov: GAME_CONFIG.camera.portraitFov, near: 0.1, far: 180 }}
       >
-        <KidsLoop phase={phase} controlsRef={controlsRef} seed={seed} soundEnabled={soundEnabled} onSnapshot={setSnapshot} onGameOver={handleGameOver} />
+        <KidsLoop phase={phase} controlsRef={controlsRef} seed={seed} soundEnabled={soundEnabled} onSnapshot={setSnapshot} onGameOver={handleGameOver} onDebugInfo={setDebugInfo} />
       </Canvas>
       <EndlessHud phase={phase} snapshot={snapshot} onPause={() => setPhase('paused')} onResume={() => setPhase('playing')} />
+      {DEBUG_DIFFICULTY.enabled && debugInfo && (
+        <div className="debug-difficulty">
+          <span>{Math.floor(debugInfo.distance)}m</span>
+          <span>Lv.{debugInfo.level}</span>
+          <span>x{debugInfo.speedMultiplier.toFixed(2)}</span>
+          <span>障{Math.round(debugInfo.obstacleRate * 100)}%</span>
+          <span>動{Math.round(debugInfo.movingObstacleRate * 100)}%</span>
+          <span>大{Math.round(debugInfo.largeNumberBallRate * 100)}%</span>
+          <span>物{Math.round(debugInfo.itemRate * 100)}%</span>
+          <span>連{debugInfo.hardRows}</span>
+        </div>
+      )}
       {phase === 'gameOver' && <EndlessResultScreen snapshot={snapshot} records={records} isNewBest={isNewBest} onRetry={retry} onHome={onHome} />}
     </section>
   )

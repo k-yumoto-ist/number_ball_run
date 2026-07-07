@@ -999,6 +999,27 @@ button {
   pointer-events: none;
 }
 
+.debug-difficulty {
+  position: absolute;
+  left: calc(env(safe-area-inset-left) + 8px);
+  bottom: calc(env(safe-area-inset-bottom) + 8px);
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: min(92vw, 420px);
+  pointer-events: none;
+}
+
+.debug-difficulty span {
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(10, 20, 35, 0.62);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .home-return-button {
   position: absolute;
   left: calc(env(safe-area-inset-left) + 12px);
